@@ -1,0 +1,97 @@
+# EXAMPLE values, not measured data. Generic, illustrative part.
+card_version: "0.1"
+id: occ:mosfet/generic-nch-30v-power@0.1.0
+part:
+  manufacturer: "GENERIC (placeholder)"
+  mpn: "PLACEHOLDER-MPN"
+  category: mosfet
+  description: "N-channel power MOSFET, 30 V, logic-level gate"
+  package: "PLACEHOLDER (e.g. DFN 5x6)"
+model_files:
+  - format: SPICE
+    dialect: ngspice
+    uri: "PLACEHOLDER-URL/generic_nch_30v.lib"
+    sha256: "PLACEHOLDER"          # card is tied to this exact file once a real hash is set
+    model_name: "GENERIC_NCH_30V"
+    signed: false                  # referenced by hash only; the vendor file has no signature
+parameters:
+  - name: vth                # gate voltage where the MOSFET starts turning on
+    unit: V
+    nominal: 1.8
+    model_binding:
+      param: VTO
+      transform: "offset: VTO_new = VTO_file + (vth_sample - 1.8)"
+      note: "Datasheet Vth (Id = 250 uA, Vds = Vgs) is not the same quantity as VTO in a vendor subcircuit. Apply the sample as a shift, never as VTO itself."
+    distribution:
+      type: normal
+      applies_to: value
+      kind: population
+      params: { mean: 1.8, sigma: 0.2 }
+      truncate: { min: 1.2, max: 2.4 }
+      basis: "Datasheet min/max treated as 3 sigma"
+      confidence: low
+    conditions: { temperature_c: 25, id_a: 250.0e-6, vds_eq_vgs: true }
+    source_refs: [ds1]
+  - name: vth_tempco
+    unit: V/K
+    nominal: -0.004
+    distribution:
+      type: uniform
+      applies_to: value
+      kind: epistemic
+      params: { min: -0.005, max: -0.003 }
+      basis: "Typical power MOSFET range of about -3 to -5 mV/K"
+      confidence: low
+    source_refs: [est1]
+  - name: rds_on             # on-resistance; sets conduction loss
+    unit: Ohm
+    nominal: 0.005
+    model_binding:
+      param: RD
+      transform: "offset: RD_new = RD_file + (rds_on_sample - 0.005)"
+      note: "Rds(on) is split across RD, RS, and channel KP in most subcircuits. A drain-resistor shift is only valid at the stated Vgs and Id."
+    distribution:
+      type: lognormal
+      applies_to: value
+      kind: population
+      params: { mu: -5.298, sigma: 0.08 }   # ln(0.005) = -5.298, about 8% spread
+      truncate: { max: 0.0065 }
+      basis: "Typ as median, datasheet max treated as about 3 sigma"
+      confidence: low
+    conditions: { temperature_c: 25, vgs_v: 10, id_a: 20 }
+    dependence:
+      - variable: temperature_c
+        interpolation: linear
+        points:              # EXAMPLE normalized curve
+          - { x: 25,  value: 1.0 }
+          - { x: 100, value: 1.4 }
+          - { x: 150, value: 1.7 }
+    source_refs: [ds1]
+correlation:
+  parameters: [vth, rds_on]
+  matrix:
+    - [1.0, 0.4]
+    - [0.4, 1.0]
+  basis: "EXAMPLE estimate. Higher Vth gives somewhat higher Rds(on), strongest at low Vgs; weak at Vgs = 10 V."
+derivation:
+  kind: hybrid
+  method: "Vendor-style SPICE subcircuit (physics) with spreads fitted from datasheet limits (data), applied as parameter offsets"
+validation:
+  maturity: "1.0"
+  tested_simulators:
+    - { name: ngspice, version: "PLACEHOLDER", result: untested }
+    - { name: LTspice, version: "PLACEHOLDER", result: untested }
+  comparisons:
+    - metric: "Id vs Vgs at Vds = 5 V"
+      dataset_ref: "PLACEHOLDER (none yet)"
+      error: "n/a"
+      notes: "To reach maturity 2.x, compare against bench measurements"
+sources:
+  - { ref: ds1, kind: datasheet, uri: "PLACEHOLDER-DATASHEET-URL", evidence: "Electrical characteristics table, Rds(on) vs T chart (placeholder)", confidence: medium }
+  - { ref: est1, kind: expert_estimate, evidence: "Typical values for this device class", confidence: low }
+provenance:
+  author: "Jacob Warren and GrizzlyRay LLC"
+  created: "2026-10-13"
+  previous_version: null
+  signatures: []
+license: CC-BY-4.0

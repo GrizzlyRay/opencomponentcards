@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GrizzlyRay/opencomponentcards/schema/v0.1/card.schema.json",
+  "$comment": "Placeholder $id: final repo URL is TBD. Schema license: Apache-2.0. Card data license: CC-BY-4.0.",
+  "title": "OpenComponentCards Card v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["card_version", "id", "part", "parameters", "derivation", "validation", "sources", "provenance", "license"],
+  "properties": {
+    "card_version": { "const": "0.1" },
+    "id": { "type": "string", "pattern": "^occ:[a-z0-9_-]+/[A-Za-z0-9._-]+@\\d+\\.\\d+\\.\\d+$" },
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manufacturer", "mpn", "category"],
+      "properties": {
+        "manufacturer": { "type": "string" },
+        "mpn": { "type": "string" },
+        "category": { "enum": ["resistor", "capacitor", "inductor", "diode", "bjt", "mosfet", "ic", "other"] },
+        "description": { "type": "string" },
+        "package": { "type": "string" },
+        "hpm_id": { "type": "string" },
+        "jitx_id": { "type": "string" }
+      }
+    },
+    "model_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["format", "uri", "sha256", "signed"],
+        "properties": {
+          "format": { "enum": ["SPICE", "IBIS", "Touchstone", "Verilog-A"] },
+          "dialect": { "type": "string" },
+          "uri": { "type": "string" },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "model_name": { "type": "string" },
+          "signed": { "type": "boolean", "description": "true if the model file itself has its own signature; false if the card only references it by hash" },
+          "signature_uri": { "type": "string" }
+        }
+      }
+    },
+    "parameters": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/parameter" } },
+    "correlation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Full correlation matrix over the named parameters (same order). Must be symmetric, unit diagonal, and positive semidefinite so it can drive Monte Carlo sampling.",
+      "required": ["parameters", "matrix", "basis"],
+      "properties": {
+        "parameters": { "type": "array", "minItems": 2, "items": { "type": "string" } },
+        "matrix": { "type": "array", "items": { "type": "array", "items": { "type": "number", "minimum": -1, "maximum": 1 } } },
+        "basis": { "type": "string" }
+      }
+    },
+    "derivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "method"],
+      "properties": { "kind": { "enum": ["physics", "data", "hybrid"] }, "method": { "type": "string" } }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maturity"],
+      "properties": {
+        "maturity": { "type": "string", "pattern": "^[0-3]\\.\\d+$", "description": "Inspired by IBIS [File Rev] levels; not the IBIS rules themselves" },
+        "tested_simulators": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["name", "result"], "properties": { "name": { "type": "string" }, "version": { "type": "string" }, "result": { "enum": ["pass", "fail", "untested"] } } } },
+        "comparisons": { "type": "array", "items": { "type": "object", "additionalProperties": false, "properties": { "metric": { "type": "string" }, "dataset_ref": { "type": "string" }, "error": { "type": "string" }, "notes": { "type": "string" } } } }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref", "kind", "confidence"],
+        "properties": {
+          "ref": { "type": "string" },
+          "kind": { "enum": ["datasheet", "measurement", "paper", "standard", "application_note", "expert_estimate"] },
+          "uri": { "type": "string" },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "evidence": { "type": "string", "description": "Where exactly, e.g. 'Table 3, p.2'" },
+          "confidence": { "$ref": "#/$defs/confidence" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["author", "created"],
+      "properties": {
+        "author": { "type": "string" },
+        "created": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "ISO 8601 date. Quote it in YAML." },
+        "previous_version": { "oneOf": [ { "$ref": "#/$defs/sha256" }, { "type": "null" } ], "description": "sha256 of the exact bytes of the prior card file" },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["method", "bundle_uri", "identity", "issuer"],
+            "properties": {
+              "method": { "const": "sigstore" },
+              "bundle_uri": { "type": "string", "pattern": "\\.sigstore\\.json$" },
+              "identity": { "type": "string", "description": "Signer identity in the Fulcio certificate, e.g. a GitHub Actions workflow URI or an email" },
+              "issuer": { "type": "string", "description": "OIDC issuer, e.g. https://token.actions.githubusercontent.com" }
+            }
+          }
+        }
+      }
+    },
+    "license": { "type": "string", "pattern": "^[A-Za-z0-9.+-]+$", "description": "SPDX license id for the card data, normally CC-BY-4.0" },
+    "notes": { "type": "string" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^([a-f0-9]{64}|PLACEHOLDER)$" },
+    "confidence": { "enum": ["low", "medium", "high"] },
+    "unit": { "enum": ["Ohm", "F", "H", "V", "A", "W", "s", "Hz", "K", "degC", "1", "ppm/K", "V/K", "1/K"] },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "unit", "nominal", "distribution", "source_refs"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "unit": { "$ref": "#/$defs/unit" },
+        "nominal": { "type": "number" },
+        "distribution": { "$ref": "#/$defs/distribution" },
+        "conditions": { "type": "object", "description": "Reference conditions, e.g. temperature_c, bias_v, vgs_v, id_a" },
+        "dependence": {
+          "type": "array",
+          "description": "Multiplicative curve applied to nominal: value(cond) = nominal * curve(cond), linear interpolation",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["variable", "points"],
+            "properties": {
+              "variable": { "type": "string" },
+              "interpolation": { "enum": ["linear"] },
+              "points": { "type": "array", "minItems": 2, "items": { "type": "object", "additionalProperties": false, "required": ["x", "value"], "properties": { "x": { "type": "number" }, "value": { "type": "number" } } } }
+            }
+          }
+        },
+        "final_limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Hard limits on the final sampled value (after curves and offsets), e.g. a class limit",
+          "required": ["min", "max", "relative_to_nominal"],
+          "properties": { "min": { "type": "number" }, "max": { "type": "number" }, "relative_to_nominal": { "type": "boolean" } }
+        },
+        "model_binding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["param", "transform", "note"],
+          "properties": {
+            "param": { "type": "string", "description": "Parameter name inside the referenced model file" },
+            "transform": { "type": "string", "description": "How a sampled card value changes that model parameter, e.g. an offset" },
+            "note": { "type": "string" }
+          }
+        },
+        "source_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "applies_to", "kind", "params", "basis", "confidence"],
+      "properties": {
+        "type": { "enum": ["normal", "uniform", "lognormal", "triangular", "empirical"] },
+        "applies_to": { "enum": ["value", "additive_offset", "relative_offset"], "description": "value: sample is the parameter itself. additive_offset: final = curve value + X. relative_offset: final = curve value * (1 + X)." },
+        "kind": { "enum": ["population", "epistemic"], "description": "population: part-to-part spread. epistemic: uncertainty about our own knowledge (see GUM / JCGM 101)." },
+        "params": { "type": "object" },
+        "truncate": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "number" }, "max": { "type": "number" } } },
+        "basis": { "type": "string", "minLength": 1 },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "normal" } } }, "then": { "properties": { "params": { "oneOf": [
+          { "type": "object", "additionalProperties": false, "required": ["mean", "sigma"], "properties": { "mean": { "type": "number" }, "sigma": { "type": "number", "exclusiveMinimum": 0 } } },
+          { "type": "object", "additionalProperties": false, "required": ["mean", "sigma_pct"], "properties": { "mean": { "type": "number" }, "sigma_pct": { "type": "number", "exclusiveMinimum": 0 } } } ] } } } },
+        { "if": { "properties": { "type": { "const": "uniform" } } }, "then": { "properties": { "params": { "type": "object", "additionalProperties": false, "required": ["min", "max"], "properties": { "min": { "type": "number" }, "max": { "type": "number" } } } } } },
+        { "if": { "properties": { "type": { "const": "lognormal" } } }, "then": { "properties": { "params": { "type": "object", "additionalProperties": false, "required": ["mu", "sigma"], "properties": { "mu": { "type": "number" }, "sigma": { "type": "number", "exclusiveMinimum": 0 } } } } } },
+        { "if": { "properties": { "type": { "const": "triangular" } } }, "then": { "properties": { "params": { "type": "object", "additionalProperties": false, "required": ["min", "mode", "max"], "properties": { "min": { "type": "number" }, "mode": { "type": "number" }, "max": { "type": "number" } } } } } },
+        { "if": { "properties": { "type": { "const": "empirical" } } }, "then": { "properties": { "params": { "oneOf": [
+          { "type": "object", "additionalProperties": false, "required": ["samples_uri", "sha256"], "properties": { "samples_uri": { "type": "string" }, "sha256": { "$ref": "#/$defs/sha256" } } },
+          { "type": "object", "additionalProperties": false, "required": ["bins"], "properties": { "bins": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["value", "probability"], "properties": { "value": { "type": "number" }, "probability": { "type": "number", "minimum": 0, "maximum": 1 } } } } } } ] } } } }
+      ]
+    }
+  }
+}

@@ -1,0 +1,22 @@
+name: Validate cards
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Validate schema and cards
+        run: |
+          shopt -s globstar nullglob
+          python3 tools/validate.py --schema schema/card.schema.json cards/**/*.yaml

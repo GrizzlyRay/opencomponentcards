@@ -1,0 +1,56 @@
+# EXAMPLE values, not measured data. Generic, illustrative part.
+card_version: "0.1"
+id: occ:resistor/generic-10k-1pct-0603@0.1.0
+part:
+  manufacturer: "GENERIC (placeholder)"
+  mpn: "PLACEHOLDER-MPN"
+  category: resistor
+  description: "10 kOhm, 1%, 0603, thick film, TCR +/-100 ppm/K"
+  package: "0603"
+model_files: []          # simple resistor: no separate model file needed
+parameters:
+  - name: resistance
+    unit: Ohm
+    nominal: 10000
+    distribution:
+      type: normal
+      applies_to: value
+      kind: population
+      params: { mean: 10000, sigma: 33.3 }   # EXAMPLE: 1% limit treated as 3 sigma
+      truncate: { min: 9900, max: 10100 }    # parts outside 1% are screened out
+      basis: "Placeholder for unknown shape: datasheet +/-1% limit treated as 3 sigma. Real lots are often much tighter, may be off-centre, and binned parts can show gaps."
+      confidence: low
+    conditions: { temperature_c: 25 }
+    source_refs: [ds1]
+  - name: tcr                # how much resistance shifts per kelvin
+    unit: ppm/K
+    nominal: 0
+    distribution:
+      type: uniform
+      applies_to: value
+      kind: epistemic
+      params: { min: -100, max: 100 }        # EXAMPLE: only limits known
+      basis: "Datasheet TCR limit, no shape info. TCR is defined over a stated span (here 25 to 125 C); thick-film TCR is not linear across the full range."
+      confidence: low
+    conditions: { reference_span_c: [25, 125] }
+    source_refs: [ds1]
+derivation:
+  kind: physics
+  method: "R(T) = R25 * (1 + TCR * 1e-6 * (T - 25)); spreads from datasheet limits"
+validation:
+  maturity: "1.0"           # datasheet-based, not checked against hardware
+  tested_simulators:
+    - { name: ngspice, version: "PLACEHOLDER", result: untested }
+  comparisons: []
+sources:
+  - ref: ds1
+    kind: datasheet
+    uri: "PLACEHOLDER-DATASHEET-URL"
+    evidence: "Electrical characteristics table (placeholder)"
+    confidence: medium
+provenance:
+  author: "Jacob Warren and GrizzlyRay LLC"
+  created: "2026-10-13"
+  previous_version: null
+  signatures: []            # added when signed with Sigstore
+license: CC-BY-4.0

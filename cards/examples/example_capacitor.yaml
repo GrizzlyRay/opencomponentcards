@@ -1,0 +1,91 @@
+# EXAMPLE values, not measured data. Generic, illustrative part.
+# Final capacitance = nominal * bias_curve(V) * temp_curve(T) * (1 + bias_offset) * (1 + temp_offset), then aging.
+card_version: "0.1"
+id: occ:capacitor/generic-10uf-x5r-0805@0.1.0
+part:
+  manufacturer: "GENERIC (placeholder)"
+  mpn: "PLACEHOLDER-MPN"
+  category: capacitor
+  description: "10 uF, X5R, 0805, 10 V rated, +/-10% (K grade; M grade +/-20% is also common)"
+  package: "0805"
+model_files: []
+parameters:
+  - name: capacitance
+    unit: F
+    nominal: 10.0e-6
+    distribution:
+      type: normal
+      applies_to: value
+      kind: population
+      params: { mean: 10.0e-6, sigma: 0.33e-6 }  # EXAMPLE: 10% limit as 3 sigma
+      truncate: { min: 9.0e-6, max: 11.0e-6 }
+      basis: "Datasheet +/-10% (K) limit treated as 3 sigma, at 25 C, 0 V bias"
+      confidence: low
+    conditions: { temperature_c: 25, bias_v: 0 }
+    source_refs: [ds1]
+  - name: dc_bias_factor     # ceramic caps lose capacitance under DC voltage
+    unit: "1"
+    nominal: 1.0
+    dependence:
+      - variable: bias_v
+        interpolation: linear
+        points:              # EXAMPLE curve for a 10 V rated part, not measured
+          - { x: 0,   value: 1.00 }
+          - { x: 3.3, value: 0.70 }
+          - { x: 5,   value: 0.55 }
+          - { x: 10,  value: 0.30 }
+    distribution:
+      type: triangular
+      applies_to: relative_offset
+      kind: population
+      params: { min: -0.10, mode: 0, max: 0.05 }
+      basis: "Expert estimate of part-to-part spread around the typical curve"
+      confidence: low
+    source_refs: [ds1, est1]
+  - name: temperature_factor # X5R: within +/-15% of the 25 C value from -55 to 85 C
+    unit: "1"
+    nominal: 1.0
+    dependence:
+      - variable: temperature_c
+        interpolation: linear
+        points:              # EXAMPLE curve, not measured
+          - { x: -55, value: 0.90 }
+          - { x: 25,  value: 1.00 }
+          - { x: 85,  value: 0.88 }
+    distribution:
+      type: uniform
+      applies_to: relative_offset
+      kind: population
+      params: { min: -0.05, max: 0.05 }
+      basis: "Spread around the typical curve, estimated"
+      confidence: low
+    final_limits: { min: 0.85, max: 1.15, relative_to_nominal: true }  # X5R class limit on the total
+    source_refs: [std1, est1]
+  - name: aging_per_decade_hour  # class II ceramics lose capacitance over time
+    unit: "1"
+    nominal: -0.02
+    distribution:
+      type: uniform
+      applies_to: value
+      kind: epistemic
+      params: { min: -0.03, max: -0.01 }
+      basis: "Typical X5R aging of about 1 to 3% per decade hour after last heat; resets on reflow"
+      confidence: low
+    source_refs: [est1]
+derivation:
+  kind: hybrid
+  method: "Nominal x bias curve x temperature curve x (1 + offsets), plus aging; curves would come from measurement. AC voltage effect not modeled in v0.1."
+validation:
+  maturity: "0.1"           # draft: curves are placeholders
+  tested_simulators: []
+  comparisons: []
+sources:
+  - { ref: ds1,  kind: datasheet, uri: "PLACEHOLDER-DATASHEET-URL", evidence: "DC bias and temperature charts (placeholder)", confidence: medium }
+  - { ref: std1, kind: standard, uri: "PLACEHOLDER (EIA-198 class II definition)", evidence: "X5R: -55 to 85 C, +/-15%", confidence: high }
+  - { ref: est1, kind: expert_estimate, evidence: "Illustrative spread for this draft", confidence: low }
+provenance:
+  author: "Jacob Warren and GrizzlyRay LLC"
+  created: "2026-10-13"
+  previous_version: null
+  signatures: []
+license: CC-BY-4.0

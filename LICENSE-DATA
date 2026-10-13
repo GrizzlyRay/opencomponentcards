@@ -1,0 +1,16 @@
+Card data license
+
+All card data in this repository (files under cards/) is licensed under the
+Creative Commons Attribution 4.0 International License (CC-BY-4.0).
+
+Copyright 2026 Jacob Warren and GrizzlyRay LLC, and contributors.
+
+You are free to share and adapt the card data for any purpose, including
+commercially, as long as you give appropriate credit, provide a link to the
+license, and indicate if changes were made.
+
+Full legal text: https://creativecommons.org/licenses/by/4.0/legalcode
+Summary: https://creativecommons.org/licenses/by/4.0/
+SPDX-License-Identifier: CC-BY-4.0
+
+The schema, code, and tools are licensed separately under Apache-2.0 (see LICENSE).
