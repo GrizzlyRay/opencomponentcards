@@ -1,0 +1,20 @@
+# OpenComponentCards trusted signers.
+# A card's Sigstore bundle must match one of these entries, and the card must be
+# inside that entry's scope. See docs/signer-trust.md.
+# New signers apply with the "Become a Signer" issue form and are added by PR.
+policy_version: 1
+levels:
+  - registry   # published by this repo and unchanged since; no datasheet check implied
+  - community  # a contributor signing with their own GitHub identity
+  - verified   # a vetted manufacturer or lab
+signers:
+  - id: grizzlyray-sign-workflow
+    name: GrizzlyRay/opencomponentcards sign workflow
+    kind: registry
+    identity:
+      san_regex: '^https://github\.com/GrizzlyRay/opencomponentcards/\.github/workflows/sign\.yml@refs/heads/main$'
+      issuer: https://token.actions.githubusercontent.com
+    scope:
+      paths: ["cards/**"]
+    added: 2026-10-13
+    approval: https://github.com/GrizzlyRay/opencomponentcards/issues/7

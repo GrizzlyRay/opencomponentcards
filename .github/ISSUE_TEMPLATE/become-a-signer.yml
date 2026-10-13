@@ -1,0 +1,59 @@
+name: Become a Signer
+description: Apply to be added to trust/signers.yaml so your signatures on cards are recognized.
+title: "Signer request: "
+labels: ["signer-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for offering to sign cards. Requests are reviewed in public, here in this issue. If it's approved, a pull request adds you to `trust/signers.yaml` and links back to this issue. See [docs/signer-trust.md](https://github.com/GrizzlyRay/opencomponentcards/blob/main/docs/signer-trust.md) for how it works.
+  - type: input
+    id: who
+    attributes:
+      label: Who You Are
+      description: Your name, and the company or lab if you're signing for one.
+      placeholder: "Jane Doe, Example Labs"
+    validations:
+      required: true
+  - type: dropdown
+    id: level
+    attributes:
+      label: Level Requested
+      options:
+        - community (an individual signing with my own GitHub identity)
+        - verified (a manufacturer or lab)
+    validations:
+      required: true
+  - type: textarea
+    id: identity
+    attributes:
+      label: Signing Identity
+      description: |
+        The Sigstore identity your signatures will carry, plus its OIDC issuer.
+        For a person: your GitHub account email or login, issuer https://github.com/login/oauth.
+        For a workflow: https://github.com/ORG/REPO/.github/workflows/FILE.yml@refs/heads/main, issuer https://token.actions.githubusercontent.com.
+    validations:
+      required: true
+  - type: textarea
+    id: proof
+    attributes:
+      label: Proof It's You
+      description: For example a GitHub org with your company domain verified, or a link from your own website or wiki that names this identity.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Cards You Want to Sign
+      description: Paths (like `cards/real/acme-*.yaml`) or manufacturer names (like "Acme Corp"). Manufacturers are usually limited to their own parts.
+    validations:
+      required: true
+  - type: checkboxes
+    id: agree
+    attributes:
+      label: Agreement
+      options:
+        - label: I'll only sign cards I've reviewed, and I'll keep each card's sources accurate.
+          required: true
+        - label: I understand my entry, this issue, and my signatures are public, and that I can be removed if a signature turns out to be misused.
+          required: true

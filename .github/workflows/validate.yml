@@ -20,3 +20,5 @@ jobs:
         run: |
           shopt -s globstar nullglob
           python3 tools/validate.py --schema schema/card.schema.json cards/**/*.yaml
+      - name: Validate signer policy
+        run: python3 tools/verify_signer.py --check-policy
