@@ -6,10 +6,11 @@ Checks the JSON Schema plus rules a schema cannot express:
 per-type distribution params, applies_to semantics, correlation matrix
 (symmetric, unit diagonal, positive semidefinite), SPDX license id,
 units, quoted ISO dates, references, nominal-vs-mean consistency,
-and published limits (min <= typ <= max, distribution support inside them).
+published limits (min <= typ <= max, distribution support inside them),
+and standard conditions keys (non-standard keys warn).
 Exit code 1 on any ERROR. WARN lines do not fail the run.
 """
-import argparse, datetime, json, math, os, re, sys
+import argparse, datetime, difflib, json, math, os, re, sys
 import yaml
 from jsonschema import Draft202012Validator
 
@@ -22,6 +23,19 @@ UNITS = {"Ohm", "F", "H", "V", "A", "W", "s", "Hz", "K", "degC", "1", "ppm/K", "
 # Small allowlist of SPDX ids that suit card data or code. Extend as needed.
 SPDX = {"CC-BY-4.0", "CC-BY-SA-4.0", "CC0-1.0", "CDLA-Permissive-2.0", "ODC-By-1.0",
         "Apache-2.0", "MIT", "BSD-3-Clause"}
+# Standard condition keys (docs/conditions.md). Units are in the key name.
+COND_KEYS = {"temperature_c", "temperature_min_c", "temperature_max_c", "reference_span_c",
+             "frequency_hz", "ac_vrms", "dc_bias_v", "bias_v", "vgs_v", "vds_v", "vds_eq_vgs",
+             "id_a", "humidity_pct", "duration_h", "preconditioning"}
+
+def check_conditions(where, cond, W):
+    """Unknown keys stay legal for backward compatibility, but get a warning and a suggestion."""
+    for k in (cond or {}):
+        if k in COND_KEYS: continue
+        close = difflib.get_close_matches(k, sorted(COND_KEYS), n=1, cutoff=0.5)
+        hint = f"; did you mean {close[0]!r}?" if close else "; see docs/conditions.md"
+        W.append(f"{where}: non-standard conditions key {k!r}{hint}")
+
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 def find_dates(o, path="$"):
@@ -111,6 +125,8 @@ def semantic(c):
                 if not lo <= p["nominal"] <= hi: E.append(f"{n}: truncate excludes nominal")
             elif abs(c0) > 0.5 * (abs(P.get("max", 0)) + abs(P.get("min", 0)) + abs(P.get("sigma", 0)) + 1e-30):
                 W.append(f"{n}: offset distribution centre {c0:g} is far from 0")
+        check_conditions(f"{n}.conditions", p.get("conditions"), W)
+        check_conditions(f"{n}.limits.conditions", (p.get("limits") or {}).get("conditions"), W)
         check_limits(n, p, d, refs, E, W)
         fl = p.get("final_limits")
         if fl:

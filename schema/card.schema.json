@@ -113,6 +113,28 @@
     "notes": { "type": "string" }
   },
   "$defs": {
+    "conditions": {
+      "type": "object",
+      "description": "Test conditions. Standard keys carry units in the name (see docs/conditions.md). Other keys are allowed; the validator warns on them.",
+      "additionalProperties": true,
+      "properties": {
+        "temperature_c": { "type": "number", "description": "Ambient or case temperature, degC" },
+        "temperature_min_c": { "type": "number", "description": "Low end of a temperature range, degC" },
+        "temperature_max_c": { "type": "number", "description": "High end of a temperature range, degC" },
+        "reference_span_c": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "Temperature span [from, to] a coefficient is defined over, degC" },
+        "frequency_hz": { "type": "number", "exclusiveMinimum": 0, "description": "Measurement frequency, Hz" },
+        "ac_vrms": { "type": "number", "minimum": 0, "description": "AC test signal level, Vrms" },
+        "dc_bias_v": { "type": "number", "description": "DC bias voltage across the part, V" },
+        "bias_v": { "type": "number", "description": "Accepted alias for dc_bias_v (used by v0.1 cards), V" },
+        "vgs_v": { "type": "number", "description": "Gate-source voltage, V" },
+        "vds_v": { "type": "number", "description": "Drain-source voltage, V" },
+        "vds_eq_vgs": { "type": "boolean", "description": "Drain tied to gate (VDS = VGS), as in threshold tests" },
+        "id_a": { "type": "number", "description": "Drain current, A" },
+        "humidity_pct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Relative humidity, %" },
+        "duration_h": { "type": "number", "minimum": 0, "description": "Test or stress duration, hours" },
+        "preconditioning": { "type": "string", "description": "Free text, e.g. a bake, rest, or burn-in before measurement" }
+      }
+    },
     "sha256": { "type": "string", "pattern": "^([a-f0-9]{64}|PLACEHOLDER)$" },
     "confidence": { "enum": ["low", "medium", "high"] },
     "unit": { "enum": ["Ohm", "F", "H", "V", "A", "W", "s", "Hz", "K", "degC", "1", "ppm/K", "V/K", "1/K"] },
@@ -125,7 +147,7 @@
         "unit": { "$ref": "#/$defs/unit" },
         "nominal": { "type": "number" },
         "distribution": { "$ref": "#/$defs/distribution" },
-        "conditions": { "type": "object", "description": "Reference conditions, e.g. temperature_c, bias_v, vgs_v, id_a" },
+        "conditions": { "$ref": "#/$defs/conditions" },
         "dependence": {
           "type": "array",
           "description": "Multiplicative curve applied to nominal: value(cond) = nominal * curve(cond), linear interpolation",
@@ -149,7 +171,7 @@
             "min": { "type": "number" },
             "typ": { "type": "number" },
             "max": { "type": "number" },
-            "conditions": { "type": "object", "description": "Conditions the limit is published at, if different from the parameter's conditions" },
+            "conditions": { "$ref": "#/$defs/conditions", "description": "Conditions the limit is published at, if different from the parameter's conditions" },
             "source_ref": { "type": "string", "description": "ref of the source that publishes this limit" }
           }
         },
