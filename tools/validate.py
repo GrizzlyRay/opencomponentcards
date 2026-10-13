@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OpenComponentCards v0.1 validator (Apache-2.0).
+"""OpenComponentCards validator (v0.2 in progress) (Apache-2.0).
 
 Usage: python3 validate.py [--schema PATH] CARD.yaml [CARD.yaml ...]
 Checks the JSON Schema plus rules a schema cannot express:
@@ -8,7 +8,10 @@ per-type distribution params, applies_to semantics, correlation matrix
 units, quoted ISO dates, references, nominal-vs-mean consistency,
 published limits (min <= typ <= max, distribution support inside them),
 standard conditions keys (non-standard keys warn), and model_binding
-transforms (required fields per type, unit match; free text warns).
+transforms (required fields per type, unit match; free text warns),
+derived source chains, and lot/device scopes in the distributions list.
+v0.1 'distribution' and 'spread_components' fail with a pointer to
+docs/migration-v0.1-to-v0.2.md.
 Exit code 1 on any ERROR. WARN lines do not fail the run.
 """
 import argparse, datetime, difflib, json, math, os, re, sys
@@ -160,38 +163,82 @@ def check_sources(srcs, E, W):
         if s["kind"] == "derived" and not reaches_primary(r, set()):
             W.append(f"sources.{r}: derived source has no upstream primary source (datasheet, measurement, or standard)")
 
+SCOPES = {"total", "lot", "device"}
+MIGRATE = "see docs/migration-v0.1-to-v0.2.md"
+
+def check_v01(c):
+    """v0.1 shapes that v0.2 removed. Reported before the schema so the message is clear."""
+    E = []
+    for i, p in enumerate(c.get("parameters") or []):
+        if not isinstance(p, dict): continue
+        n = p.get("name", f"parameters[{i}]")
+        if "distribution" in p: E.append(f"{n}: v0.1 'distribution' replaced by 'distributions' list; {MIGRATE}")
+        if "spread_components" in p: E.append(f"{n}: 'spread_components' was removed; put lot and device entries in 'distributions'; {MIGRATE}")
+        for j, d in enumerate(p.get("distributions") or []):
+            if isinstance(d, dict) and "informational" in d:
+                E.append(f"{n}.distributions[{j}]: 'informational' was removed; a parameter has either one total or lot/device entries, not both; {MIGRATE}")
+    return E
+
+def check_scopes(n, ds, E, W):
+    """Lot vs device spread (#5): exactly one total, OR lot and/or device with no total."""
+    seen = {}
+    for i, x in enumerate(ds):
+        sc = x["scope"]
+        if sc in seen: E.append(f"{n}: duplicate scope {sc!r} in distributions[{seen[sc]}] and distributions[{i}]")
+        else: seen[sc] = i
+        if sc != "total" and x.get("kind") == "epistemic":
+            W.append(f"{n}.distributions[{i}]: scope {sc!r} only makes sense for kind 'population' (this is epistemic)")
+    split = {"lot", "device"} & set(seen)
+    if "total" in seen and split:
+        E.append(f"{n}: scope 'total' can't be combined with {sorted(split)}; give either one total or lot/device entries")
+    if len(split) == 1:
+        W.append(f"{n}: only a {next(iter(split))!r} spread is given; the other is treated as zero")
+    if sum(1 for x in ds if x["scope"] in ("lot", "device") and x["applies_to"] == "value") > 1:
+        E.append(f"{n}: lot and device can't both use applies_to 'value'; make at least one an offset so they stack")
+    return bool(split)
+
+def check_dist(n, p, d, E, W):
+    t, P = d["type"], d["params"]
+    ks = set(P)
+    if not any(r == ks for r in REQ[t]): E.append(f"{n}: {t} params must be one of {REQ[t]}, got {sorted(ks)}"); return
+    if d.get("applies_to") not in APPLIES: E.append(f"{n}: applies_to must be one of {sorted(APPLIES)}")
+    if t == "uniform" and not P["min"] < P["max"]: E.append(f"{n}: uniform min must be < max")
+    if t == "triangular" and not P["min"] <= P["mode"] <= P["max"]: E.append(f"{n}: triangular needs min <= mode <= max")
+    if t in ("normal", "lognormal") and P.get("sigma", P.get("sigma_pct", 1)) <= 0: E.append(f"{n}: sigma must be > 0")
+    if t == "empirical" and "bins" in P and abs(sum(b["probability"] for b in P["bins"]) - 1) > 1e-6: E.append(f"{n}: bin probabilities must sum to 1")
+    tr = d.get("truncate", {})
+    if "min" in tr and "max" in tr and tr["min"] >= tr["max"]: E.append(f"{n}: truncate min must be < max")
+    c0 = centre(t, P)
+    if c0 is not None:
+        if d["applies_to"] == "value":
+            if d["scope"] == "total" and p["nominal"] and abs(c0 - p["nominal"]) / abs(p["nominal"]) > 0.02:
+                W.append(f"{n}: distribution centre {c0:g} differs from nominal {p['nominal']:g} by >2%")
+            lo, hi = tr.get("min", -math.inf), tr.get("max", math.inf)
+            if not lo <= p["nominal"] <= hi: E.append(f"{n}: truncate excludes nominal")
+        elif abs(c0) > 0.5 * (abs(P.get("max", 0)) + abs(P.get("min", 0)) + abs(P.get("sigma", 0)) + 1e-30):
+            W.append(f"{n}: offset distribution centre {c0:g} is far from 0")
+
 def semantic(c):
     E, W = [], []
     params = c.get("parameters", [])
     names = [p["name"] for p in params]
     refs = {s["ref"] for s in c.get("sources", [])}
+    split_params = set()
     if len(set(names)) != len(names): E.append("duplicate parameter names")
     if c.get("license") not in SPDX: E.append(f"license {c.get('license')!r} is not an allowed SPDX id")
     if not DATE_RE.match(str(c.get("provenance", {}).get("created", ""))): E.append("provenance.created must be a quoted ISO date")
     for p in params:
-        n, d = p["name"], p["distribution"]; t, P = d["type"], d["params"]
+        n, ds = p["name"], p["distributions"]
         if p["unit"] not in UNITS: E.append(f"{n}: unit {p['unit']!r} not in unit list")
-        ks = set(P)
-        if not any(r == ks for r in REQ[t]): E.append(f"{n}: {t} params must be one of {REQ[t]}, got {sorted(ks)}")
-        if d.get("applies_to") not in APPLIES: E.append(f"{n}: applies_to must be one of {sorted(APPLIES)}")
-        if t == "uniform" and not P["min"] < P["max"]: E.append(f"{n}: uniform min must be < max")
-        if t == "triangular" and not P["min"] <= P["mode"] <= P["max"]: E.append(f"{n}: triangular needs min <= mode <= max")
-        if t in ("normal", "lognormal") and P.get("sigma", P.get("sigma_pct", 1)) <= 0: E.append(f"{n}: sigma must be > 0")
-        if t == "empirical" and "bins" in P and abs(sum(b["probability"] for b in P["bins"]) - 1) > 1e-6: E.append(f"{n}: bin probabilities must sum to 1")
-        tr = d.get("truncate", {})
-        if "min" in tr and "max" in tr and tr["min"] >= tr["max"]: E.append(f"{n}: truncate min must be < max")
-        c0 = centre(t, P)
-        if c0 is not None:
-            if d["applies_to"] == "value":
-                if p["nominal"] and abs(c0 - p["nominal"]) / abs(p["nominal"]) > 0.02:
-                    W.append(f"{n}: distribution centre {c0:g} differs from nominal {p['nominal']:g} by >2%")
-                lo, hi = tr.get("min", -math.inf), tr.get("max", math.inf)
-                if not lo <= p["nominal"] <= hi: E.append(f"{n}: truncate excludes nominal")
-            elif abs(c0) > 0.5 * (abs(P.get("max", 0)) + abs(P.get("min", 0)) + abs(P.get("sigma", 0)) + 1e-30):
-                W.append(f"{n}: offset distribution centre {c0:g} is far from 0")
+        where = (lambda i, d: n if len(ds) == 1 else f"{n}.distributions[{i}] ({d['scope']})")
+        for i, d in enumerate(ds): check_dist(where(i, d), p, d, E, W)
+        split = check_scopes(n, ds, E, W)
+        if split: split_params.add(n)
         check_conditions(f"{n}.conditions", p.get("conditions"), W)
         check_conditions(f"{n}.limits.conditions", (p.get("limits") or {}).get("conditions"), W)
-        check_limits(n, p, d, refs, E, W)
+        tot = next((d for d in ds if d["scope"] == "total"), None)
+        if tot: check_limits(n, p, tot, refs, E, W)
+        elif p.get("limits"): check_limits(n, p, {"applies_to": "split"}, refs, E, W)  # order and ref only
         check_binding(n, p, E, W)
         fl = p.get("final_limits")
         if fl:
@@ -200,7 +247,7 @@ def semantic(c):
                 for v in interp(dep["points"], None):
                     val = v if fl["relative_to_nominal"] else v * p["nominal"]
                     if not fl["min"] <= val <= fl["max"]: E.append(f"{n}: curve point {v} lies outside final_limits")
-        if d["applies_to"] != "value" and not p.get("dependence"):
+        if tot and tot["applies_to"] != "value" and not p.get("dependence"):
             W.append(f"{n}: offset distribution without a dependence curve; offset is applied to nominal")
         for s in p["source_refs"]:
             if s not in refs: E.append(f"{n}: unknown source_ref {s!r}")
@@ -217,6 +264,9 @@ def semantic(c):
                 for j in range(k):
                     if abs(m[i][j] - m[j][i]) > 1e-9: E.append(f"correlation: not symmetric at [{i}][{j}]")
             if not is_psd(m): E.append("correlation: matrix is not positive semidefinite")
+        mixed = [x for x in cp if x in split_params]
+        if mixed and len(mixed) != len(cp):
+            W.append(f"correlation: {mixed} have lot/device entries but {[x for x in cp if x not in split_params]} don't; the matrix is applied to the lot and device draws separately, and a total-only parameter joins the device draw")
     for mf in c.get("model_files", []):
         if mf["sha256"] == "PLACEHOLDER": W.append(f"placeholder sha256 for model file {mf['uri']}")
     return E, W
@@ -235,9 +285,11 @@ def main():
     for f in a.cards:
         raw = yaml.safe_load(open(f))
         E = [f"unquoted YAML date at {p} (quote it, e.g. \"2026-10-13\")" for p in find_dates(raw)]
+        if not E: E = check_v01(raw)
         if not E:
             E += [f"schema {'/'.join(map(str, e.absolute_path)) or '$'}: {e.message[:160]}" for e in V.iter_errors(raw)]
-            e2, W = semantic(raw); E += e2
+            W = []
+            if not E: e2, W = semantic(raw); E += e2  # semantic rules assume a schema-valid card
         else:
             W = []
         print(f"\n{f}: {'PASS' if not E else 'FAIL'}" + (f" ({len(W)} warning(s))" if W else ""))

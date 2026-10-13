@@ -157,12 +157,12 @@
     "parameter": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "unit", "nominal", "distribution", "source_refs"],
+      "required": ["name", "unit", "nominal", "distributions", "source_refs"],
       "properties": {
         "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "unit": { "$ref": "#/$defs/unit" },
         "nominal": { "type": "number" },
-        "distribution": { "$ref": "#/$defs/distribution" },
+        "distributions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/distribution" }, "description": "How the parameter varies. Either exactly one entry with scope total, or a lot and/or device entry with no total. Replaces the v0.1 single distribution. See docs/lot-device-spread.md and docs/migration-v0.1-to-v0.2.md." },
         "conditions": { "$ref": "#/$defs/conditions" },
         "dependence": {
           "type": "array",
@@ -181,7 +181,7 @@
         "limits": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Published limits for this parameter, e.g. from a datasheet, kept apart from the modeling choice in distribution. Same unit as the parameter. Optional.",
+          "description": "Published limits for this parameter, e.g. from a datasheet, kept apart from the modeling choice in distributions. Same unit as the parameter. Optional.",
           "anyOf": [ { "required": ["min"] }, { "required": ["typ"] }, { "required": ["max"] } ],
           "properties": {
             "min": { "type": "number" },
@@ -217,7 +217,7 @@
     "distribution": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "applies_to", "kind", "params", "basis", "confidence"],
+      "required": ["scope", "type", "applies_to", "kind", "params", "basis", "confidence"],
       "properties": {
         "type": { "enum": ["normal", "uniform", "lognormal", "triangular", "empirical"] },
         "applies_to": { "enum": ["value", "additive_offset", "relative_offset"], "description": "value: sample is the parameter itself. additive_offset: final = curve value + X. relative_offset: final = curve value * (1 + X)." },
@@ -225,7 +225,8 @@
         "params": { "type": "object" },
         "truncate": { "type": "object", "additionalProperties": false, "properties": { "min": { "type": "number" }, "max": { "type": "number" } } },
         "basis": { "type": "string", "minLength": 1 },
-        "confidence": { "$ref": "#/$defs/confidence" }
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "scope": { "enum": ["total", "lot", "device"], "description": "Which part of the spread this entry is. total: all of it. lot: lot-to-lot spread, one draw shared by every part in a lot (SPICE LOT). device: device-to-device spread within one lot (SPICE DEV). lot and device only make sense for kind: population." }
       },
       "allOf": [
         { "if": { "properties": { "type": { "const": "normal" } } }, "then": { "properties": { "params": { "oneOf": [

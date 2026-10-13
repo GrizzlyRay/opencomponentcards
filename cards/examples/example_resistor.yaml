@@ -12,27 +12,35 @@ parameters:
   - name: resistance
     unit: Ohm
     nominal: 10000
-    distribution:
-      type: normal
-      applies_to: value
-      kind: population
-      params: { mean: 10000, sigma: 33.3 }   # EXAMPLE: 1% limit treated as 3 sigma
-      truncate: { min: 9900, max: 10100 }    # parts outside 1% are screened out
-      basis: "Placeholder for unknown shape: datasheet +/-1% limit treated as 3 sigma. Real lots are often much tighter, may be off-centre, and binned parts can show gaps."
-      confidence: low
+    distributions:                           # EXAMPLE values: the 1% spread split into lot and device (SPICE LOT/DEV)
+      - scope: lot                           # one draw per reel, shared by every resistor on it
+        type: normal
+        applies_to: relative_offset
+        kind: population
+        params: { mean: 0, sigma: 0.0029 }   # EXAMPLE: 0.29% lot-to-lot sigma
+        basis: "EXAMPLE split, not measured: most of the spread treated as lot-to-lot, so parts from one reel track each other. Combined with device, about the datasheet +/-1% limit treated as 3 sigma."
+        confidence: low
+      - scope: device                        # independent draw per resistor within a lot
+        type: normal
+        applies_to: relative_offset
+        kind: population
+        params: { mean: 0, sigma: 0.0017 }   # EXAMPLE: 0.17% device-to-device sigma; sqrt(0.29^2 + 0.17^2) ~ 0.333% total
+        basis: "EXAMPLE split, not measured: device-to-device spread within one lot."
+        confidence: low
     conditions: { temperature_c: 25 }
     limits: { min: 9900, typ: 10000, max: 10100, source_ref: ds1 }  # EXAMPLE: published +/-1%
     source_refs: [ds1]
   - name: tcr                # how much resistance shifts per kelvin
     unit: ppm/K
     nominal: 0
-    distribution:
-      type: uniform
-      applies_to: value
-      kind: epistemic
-      params: { min: -100, max: 100 }        # EXAMPLE: only limits known
-      basis: "Datasheet TCR limit, no shape info. TCR is defined over a stated span (here 25 to 125 C); thick-film TCR is not linear across the full range."
-      confidence: low
+    distributions:
+      - scope: total
+        type: uniform
+        applies_to: value
+        kind: epistemic
+        params: { min: -100, max: 100 }        # EXAMPLE: only limits known
+        basis: "Datasheet TCR limit, no shape info. TCR is defined over a stated span (here 25 to 125 C); thick-film TCR is not linear across the full range."
+        confidence: low
     conditions: { reference_span_c: [25, 125] }
     limits: { min: -100, max: 100, source_ref: ds1 }  # EXAMPLE: published TCR limit
     source_refs: [ds1]

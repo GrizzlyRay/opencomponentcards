@@ -2,6 +2,7 @@
 # Real values, taken from the Adom wiki component page https://wiki.adom.inc/adom/0603waf470kt5e
 # Every number below is a datasheet limit with its page. The datasheet gives no distribution
 # shapes, so each spread is a uniform over the published limit.
+# Converted to the v0.2 'distributions' list from Drew Owens' original v0.1 card (https://wiki.adom.inc/drew2/community-open-component-cards). Structure only; every value, basis, and attribution is unchanged.
 card_version: "0.1"
 id: occ:resistor/royalohm-0603waf470kt5e@0.1.0
 part:
@@ -15,36 +16,39 @@ parameters:
   - name: resistance
     unit: Ohm
     nominal: 4.7
-    distribution:
-      type: uniform
-      applies_to: value
-      kind: population
-      params: { min: 4.653, max: 4.747 }
-      basis: "Datasheet +/-1% tolerance (p.3). Shape not published; uniform over the limit."
-      confidence: low
+    distributions:
+      - scope: total
+        type: uniform
+        applies_to: value
+        kind: population
+        params: { min: 4.653, max: 4.747 }
+        basis: "Datasheet +/-1% tolerance (p.3). Shape not published; uniform over the limit."
+        confidence: low
     conditions: { temperature_c: 25 }
     source_refs: [ds1]
   - name: tcr
     unit: ppm/K
     nominal: 0
-    distribution:
-      type: uniform
-      applies_to: value
-      kind: epistemic
-      params: { min: -200, max: 200 }
-      basis: "Datasheet TCR +/-200 ppm/K, the 0603 bracket for 1 to 10 Ohm (p.3). Values above 10 Ohm get +/-100 ppm/K."
-      confidence: low
+    distributions:
+      - scope: total
+        type: uniform
+        applies_to: value
+        kind: epistemic
+        params: { min: -200, max: 200 }
+        basis: "Datasheet TCR +/-200 ppm/K, the 0603 bracket for 1 to 10 Ohm (p.3). Values above 10 Ohm get +/-100 ppm/K."
+        confidence: low
     source_refs: [ds1]
   - name: load_life_drift
     unit: "1"
     nominal: 0
-    distribution:
-      type: uniform
-      applies_to: value
-      kind: population
-      params: { min: -0.0206, max: 0.0206 }
-      basis: "Datasheet load life: Delta R within +/-(1% + 0.05 Ohm) (p.3). At 4.7 Ohm that is +/-0.097 Ohm, or +/-2.06%."
-      confidence: low
+    distributions:
+      - scope: total
+        type: uniform
+        applies_to: value
+        kind: population
+        params: { min: -0.0206, max: 0.0206 }
+        basis: "Datasheet load life: Delta R within +/-(1% + 0.05 Ohm) (p.3). At 4.7 Ohm that is +/-0.097 Ohm, or +/-2.06%."
+        confidence: low
     source_refs: [ds1]
 derivation:
   kind: physics
