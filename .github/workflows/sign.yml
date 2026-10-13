@@ -35,7 +35,10 @@ jobs:
         run: |
           while read -r card; do
             [ -n "$card" ] || continue
-            cosign sign-blob --yes --bundle "${card}.sigstore.json" "$card"
+            # Write only this workflow's own bundle. Other signers' files in the
+            # folder are never touched, so a stale one shows up in the verifier.
+            mkdir -p "${card}.sigs"
+            cosign sign-blob --yes --bundle "${card}.sigs/grizzlyray-sign-workflow.sigstore.json" "$card"
           done < /tmp/cards.txt
 
       - name: Commit bundles

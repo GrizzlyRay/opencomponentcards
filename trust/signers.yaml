@@ -18,3 +18,12 @@ signers:
       paths: ["cards/**"]
     added: 2026-10-13
     approval: https://github.com/GrizzlyRay/opencomponentcards/issues/7
+
+# Optional rules that need more than one signature for some cards. None are on yet.
+# Example:
+# policies:
+#   - id: production-power
+#     description: Power parts need the registry plus a verified manufacturer.
+#     paths: ["cards/real/power/**"]
+#     require: { min_signers: 2, kinds: [registry, verified] }
+policies: []

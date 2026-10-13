@@ -48,6 +48,24 @@ If you want to split a spread into lot and device, replace the `total` entry wit
 
 All cards in this repo were converted this way, including Drew Owens' two cards in `cards/real/`. Only the structure changed. Each of his cards has a comment noting the conversion from his [original v0.1 card](https://wiki.adom.inc/drew2/community-open-component-cards). The cards are re-signed when the change merges.
 
+## Breaking Change: Signature Files Moved to `<card>.sigs/` (#7)
+
+Card contents don't change, but signature files do. A card's bundle used to be `<card>.sigstore.json`. Now each card has a folder with one bundle per signer:
+
+```
+<card>.sigs/<signer-id>.sigstore.json
+```
+
+Every bundle in this repo was moved to `<card>.sigs/grizzlyray-sign-workflow.sigstore.json`, so the signatures are still valid. If you keep your own copy of cards, move them the same way:
+
+```sh
+for b in $(find cards -name '*.sigstore.json' -not -path '*.sigs/*'); do
+  c="${b%.sigstore.json}"; mkdir -p "$c.sigs"; git mv "$b" "$c.sigs/grizzlyray-sign-workflow.sigstore.json"
+done
+```
+
+Scripts that call `cosign verify-blob --bundle <card>.sigstore.json` need the new path, or use `tools/verify.sh`. See [signer-trust.md](signer-trust.md).
+
 ## Other v0.2 changes so far (not breaking)
 
 These are all optional additions, so a v0.1 card only needs the change above.
@@ -57,6 +75,6 @@ These are all optional additions, so a v0.1 card only needs the change above.
 - **Structured `model_binding.transform`** (#6): `offset`, `scale`, `replace`, or `affine`. Plain-text transforms still pass with a warning. See [model-binding.md](model-binding.md).
 - **`derived` source kind** (#4): a `derived_from` chain from a wiki page or tool back to a datasheet. See [derived-sources.md](derived-sources.md).
 - **Family cards** (#2): a new `card_type: family` card holds what a series shares plus value-dependent `rules`, and a part card can point at it with an optional `family: {id, sha256, select}`. Cards without `family` work exactly as before. If you edit a family card, update the `sha256` in the part cards that pin it. See [family-cards.md](family-cards.md).
-- **Signer trust policy** (#7): `trust/signers.yaml` lists who's trusted to sign cards and at what level. Cards don't change. `tools/verify.sh` takes card paths the same way but now checks the policy, and accepts `--min-level`. See [signer-trust.md](signer-trust.md).
+- **Signer trust policy** (#7): `trust/signers.yaml` lists who's trusted to sign cards and at what level. Cards don't change. `tools/verify.sh` takes card paths the same way but now checks the policy, and accepts `--min-level` and `--strict`. Multiple signatures per card are covered above. See [signer-trust.md](signer-trust.md).
 
 All suggested by Drew Owens (Adom).
