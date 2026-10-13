@@ -7,7 +7,8 @@ per-type distribution params, applies_to semantics, correlation matrix
 (symmetric, unit diagonal, positive semidefinite), SPDX license id,
 units, quoted ISO dates, references, nominal-vs-mean consistency,
 published limits (min <= typ <= max, distribution support inside them),
-and standard conditions keys (non-standard keys warn).
+standard conditions keys (non-standard keys warn), and model_binding
+transforms (required fields per type, unit match; free text warns).
 Exit code 1 on any ERROR. WARN lines do not fail the run.
 """
 import argparse, datetime, difflib, json, math, os, re, sys
@@ -79,6 +80,36 @@ def check_limits(n, p, d, refs, E, W):
     if "max" in lim and hi > lim["max"] + eps:
         W.append(f"{n}: distribution can go above limits.max {lim['max']:g} (support ends at {hi:g}); add a truncate or check the modeling choice")
 
+# Machine-readable model binding (docs/model-binding.md).
+TRANSFORM_FIELDS = {"offset": (set(), {"reference", "param_unit"}),
+                    "scale": (set(), {"reference", "param_unit"}),
+                    "replace": (set(), {"param_unit"}),
+                    "affine": ({"factor", "offset"}, {"param_unit"})}
+
+def check_binding(n, p, E, W):
+    mb = p.get("model_binding")
+    if not mb: return
+    tf = mb["transform"]
+    if isinstance(tf, str):
+        kind = tf.split(":", 1)[0].strip().lower()
+        hint = f"type: {kind}" if kind in TRANSFORM_FIELDS else "type: offset | scale | replace | affine"
+        W.append(f"{n}: model_binding.transform is free text; use the structured form ({{{hint}, ...}}) and move the prose to note. See docs/model-binding.md")
+        return
+    t = tf["type"]; need, opt = TRANSFORM_FIELDS[t]; have = set(tf) - {"type"}
+    for k in sorted(need - have): E.append(f"{n}: {t} transform needs {k!r}")
+    for k in sorted(have - need - opt): E.append(f"{n}: {t} transform does not use {k!r}")
+    if t == "scale":
+        ref = tf.get("reference", p["nominal"])
+        if ref == 0: E.append(f"{n}: scale transform needs a nonzero reference (nominal is 0)")
+    if t == "affine" and tf.get("factor") == 0: W.append(f"{n}: affine factor 0 ignores the sample")
+    pu = tf.get("param_unit")
+    if pu is None:
+        if t in ("offset", "replace"): W.append(f"{n}: {t} transform has no param_unit; assuming {p['unit']!r}")
+        return
+    if pu not in UNITS: W.append(f"{n}: param_unit {pu!r} not in unit list, unit check skipped")
+    elif t in ("offset", "replace") and pu != p["unit"]:
+        E.append(f"{n}: {t} transform needs param_unit to match the card unit {p['unit']!r}, got {pu!r} (use affine to convert)")
+
 def is_psd(m):
     """Cholesky with a small tolerance; returns True if positive semidefinite."""
     n = len(m); L = [[0.0] * n for _ in range(n)]
@@ -128,6 +159,7 @@ def semantic(c):
         check_conditions(f"{n}.conditions", p.get("conditions"), W)
         check_conditions(f"{n}.limits.conditions", (p.get("limits") or {}).get("conditions"), W)
         check_limits(n, p, d, refs, E, W)
+        check_binding(n, p, E, W)
         fl = p.get("final_limits")
         if fl:
             if fl["min"] >= fl["max"]: E.append(f"{n}: final_limits min must be < max")
