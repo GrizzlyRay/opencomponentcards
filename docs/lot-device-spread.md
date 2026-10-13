@@ -81,3 +81,7 @@ The `correlation` matrix is applied at each scope separately: lot draws are corr
 - Warning: `scope: lot` or `device` with `kind: epistemic`. Scope describes part-to-part spread, which is a population idea.
 - Warning: only one of lot or device is given.
 - Published `limits` are checked against the `total` entry. For split parameters only the limit order and source are checked.
+
+## Screening and Limits
+
+Don't truncate a lot or device entry on its own. Real parts are screened on their final value, which is the lot shift and the device spread combined. Tools should sample both, add them, and then apply the parameter's `limits` to that combined value.
