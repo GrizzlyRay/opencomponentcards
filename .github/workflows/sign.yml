@@ -52,3 +52,16 @@ jobs:
             git commit -m "Sign cards with Sigstore [skip ci]"
             git push
           fi
+
+      # Check the re-signed state that's now on main. This is the strict
+      # signature check for card changes.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Verify signatures after re-signing
+        run: |
+          shopt -s globstar nullglob
+          python3 tools/verify_signer.py --check-policy
+          tools/verify.sh --strict cards/**/*.yaml
+          python3 tests/test_verify_signer.py
