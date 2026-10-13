@@ -31,9 +31,13 @@ cards/real/*.yaml           Real-data cards built from datasheets by Drew Owens 
 cards/real/families/*.yaml  Family cards: shared series data plus value-dependent rules
 tools/validate.py           Validator: schema plus extra consistency checks
 tools/resolve.py            Merges a family card and a part card into one resolved card
+tools/verify.sh             Verifies card signatures against the trusted-signer policy
+trust/signers.yaml          Public allow-list of trusted signers
+schema/signers.schema.json  JSON Schema for trust/signers.yaml
 docs/conditions.md          Standard keys for conditions
 docs/lot-device-spread.md   Lot vs device spread in the distributions list
 docs/family-cards.md        Family cards and value-dependent rules
+docs/signer-trust.md        Signer trust levels and how to become a signer
 docs/migration-v0.1-to-v0.2.md  What changed since v0.1 and how to convert cards
 ```
 
@@ -70,18 +74,22 @@ A huge thank you to **Drew Owens** at [Adom](https://wiki.adom.inc), who built b
 
 Every card in `cards/` is signed by this repo's GitHub Actions workflow using Sigstore keyless signing. The signature bundle sits next to the card as `<card>.sigstore.json`. Nobody holds a private key; the signer is the workflow's GitHub identity.
 
+Who counts as a trusted signer lives in [trust/signers.yaml](trust/signers.yaml), a public allow-list with three levels: `registry` (published by this repo and unchanged), `community` (a contributor's own GitHub identity), and `verified` (a vetted manufacturer or lab). Today the only signer is this repo's workflow, at the `registry` level.
+
 Install [cosign](https://docs.sigstore.dev/cosign/system_config/installation/), then run:
 
 ```sh
-cosign verify-blob cards/examples/example_resistor.yaml \
-  --bundle cards/examples/example_resistor.yaml.sigstore.json \
-  --certificate-identity "https://github.com/GrizzlyRay/opencomponentcards/.github/workflows/sign.yml@refs/heads/main" \
-  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+tools/verify.sh cards/examples/example_resistor.yaml
+tools/verify.sh --min-level verified cards/real/*.yaml
 ```
 
-Or use the helper: `tools/verify.sh cards/examples/example_resistor.yaml`
+It checks each bundle against the policy and prints the signer and level. A card fails if its signer isn't in the list, the card is outside that signer's scope, or the card changed.
 
-`Verified OK` means this exact card was published by the GrizzlyRay/opencomponentcards workflow and hasn't changed since. It doesn't mean the numbers are right. That's what the card's sources and maturity level are for.
+`registry` means this exact card was published by the GrizzlyRay/opencomponentcards workflow and hasn't changed since. It doesn't mean the numbers are right. That's what the card's sources and maturity level are for. See [docs/signer-trust.md](docs/signer-trust.md).
+
+## Become a Signer
+
+Manufacturers, labs, and engineers can apply to sign cards with their own identity. Open a new issue and pick the **Become a Signer** form. It asks who you are, the identity you'll sign with, proof that it's you, and which cards you'd sign. Requests are reviewed in public, and approved signers are added to `trust/signers.yaml` by PR. Details are in [docs/signer-trust.md](docs/signer-trust.md).
 
 ## Feedback wanted
 
@@ -90,7 +98,6 @@ Open an issue, especially on:
 - exporting cards to SPICE Monte Carlo syntax (agauss, mc, DEV/LOT)
 - binding card values into vendor subcircuit models
 - mapping to CycloneDX or SPDX
-- who should sign cards and how to trust signers
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -113,3 +120,4 @@ CycloneDX and SPDX 3.0, IBIS and the IBIS Quality Specification, CMC compact mod
 - Added a `derived` source kind with a `derived_from` list, so a card can record a chain like "wiki page X cites datasheet p.3". The validator checks that the refs exist, that there's no cycle, and warns when a derived source doesn't trace back to a datasheet, measurement, or standard (#4, suggested by Drew Owens). See [docs/derived-sources.md](docs/derived-sources.md).
 - **Breaking:** replaced the single `distribution` with a `distributions` list. Each entry has a `scope` of `total`, `lot`, or `device`: either one `total`, or lot and/or device with no total, mirroring SPICE Monte Carlo `LOT` and `DEV`. v0.1 cards with `distribution` now fail with a pointer to the migration guide, and every card in the repo was converted (#5, suggested by Drew Owens). See [docs/lot-device-spread.md](docs/lot-device-spread.md) and [docs/migration-v0.1-to-v0.2.md](docs/migration-v0.1-to-v0.2.md).
 - Added family cards. A `card_type: family` card holds what a whole series shares, plus `rules` with `when` conditions on selectors like resistance, so the Royalohm 0603WAF TCR bracket (+/-200 ppm/K for 1 to 10 Ohm, +/-100 ppm/K above 10 Ohm) lives in one place. Part cards can link to a family with an optional `family` reference and override any field. `tools/resolve.py` merges the two, and the validator checks the link, the sha256, overlapping rules, and the resolved card. The design follows prior art from JEDEC JEP30 Family objects and JITX's parametric component families (#2, suggested by Drew Owens). See [docs/family-cards.md](docs/family-cards.md).
+- Added a signer trust policy. `trust/signers.yaml` lists trusted Sigstore identities, each with a level (`registry`, `community`, or `verified`) and a scope, and CI checks it against `schema/signers.schema.json`. `tools/verify.sh` now verifies cards against the policy and accepts `--min-level`. A **Become a Signer** issue form lets manufacturers, labs, and engineers apply in public. The design borrows from PyPI and npm trusted publishing (#7). See [docs/signer-trust.md](docs/signer-trust.md).
