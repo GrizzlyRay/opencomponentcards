@@ -1,6 +1,6 @@
 # EXAMPLE values, not measured data. Generic, illustrative part.
 # Final capacitance = nominal * bias_curve(V) * temp_curve(T) * (1 + bias_offset) * (1 + temp_offset), then aging.
-card_version: "0.1"
+card_version: "0.2"
 id: occ:capacitor/generic-10uf-x5r-0805@0.1.0
 part:
   manufacturer: "GENERIC (placeholder)"

@@ -1,6 +1,6 @@
 # Contributing to OpenComponentCards
 
-Thanks for helping. This is a v0.1 draft, so feedback on the schema itself is as valuable as new cards.
+Thanks for helping. This is v0.2, still early, so feedback on the schema itself is as valuable as new cards.
 
 ## Ways to help
 

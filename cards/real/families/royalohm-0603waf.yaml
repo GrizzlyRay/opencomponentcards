@@ -4,7 +4,7 @@
 # covers the whole 0603WAF series and that the TCR bracket depends on the value.
 # Nothing here is new data. Facts his data doesn't give for the whole series are listed
 # under not_published instead of being guessed.
-card_version: "0.1"
+card_version: "0.2"
 card_type: family
 id: occ:family/royalohm-0603waf@0.1.0
 family:

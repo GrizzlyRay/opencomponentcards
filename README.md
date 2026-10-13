@@ -1,6 +1,6 @@
 # OpenComponentCards
 
-**v0.1 draft, feedback wanted.**
+**v0.2, feedback wanted.**
 By Jacob Warren and GrizzlyRay LLC.
 
 > Researched and drafted by Jacob Warren with Grok and AI assistants; example values are assumptions, not manufacturer statistics.
@@ -25,7 +25,7 @@ A **Component Card** is a small YAML file that sits next to an existing model fi
 ## Repository layout
 
 ```
-schema/card.schema.json     JSON Schema (draft 2020-12) for v0.1 cards
+schema/card.schema.json     JSON Schema (draft 2020-12) for v0.2 cards
 cards/examples/*.yaml       Three example cards: resistor, ceramic capacitor, power MOSFET
 cards/real/*.yaml           Real-data cards built from datasheets by Drew Owens (Adom)
 cards/real/families/*.yaml  Family cards: shared series data plus value-dependent rules
@@ -113,8 +113,9 @@ CycloneDX and SPDX 3.0, IBIS and the IBIS Quality Specification, CMC compact mod
 
 ## Changelog
 
-**v0.2 (in progress).** The schema version stays 0.1 until all seven v0.2 issues are done. v0.2 has two breaking changes so far; see [docs/migration-v0.1-to-v0.2.md](docs/migration-v0.1-to-v0.2.md).
+**v0.2 (2026-10-13).** Cards now use `card_version: "0.2"`. There are two breaking changes, the `distributions` list and the signature file layout; see [docs/migration-v0.1-to-v0.2.md](docs/migration-v0.1-to-v0.2.md). Thanks to Drew Owens, an engineer at Adom, whose notes shaped this release.
 
+- Bumped `card_version` to `"0.2"` in the schema and every card. The schema rejects `"0.1"`.
 - Added an optional `limits` field for published datasheet limits (#1, suggested by Drew Owens).
 - Added a standard vocabulary for `conditions` keys, with units in the key name. Non-standard keys still pass but get a warning with the closest match (#3, suggested by Drew Owens). See [docs/conditions.md](docs/conditions.md).
 - Made `model_binding.transform` machine-readable, with `offset`, `scale`, `replace`, and `affine` types plus an optional `note`. Plain string transforms still pass but get a warning (#6, suggested by Drew Owens). See [docs/model-binding.md](docs/model-binding.md).

@@ -1,6 +1,6 @@
 # Model binding
 
-`model_binding` tells an exporter how a sampled card value changes a parameter in the referenced model file. Since v0.2 (in progress), `transform` is structured so a tool can apply it without a person reading the note. Suggested by Drew Owens (#6).
+`model_binding` tells an exporter how a sampled card value changes a parameter in the referenced model file. Since v0.2, `transform` is structured so a tool can apply it without a person reading the note. Suggested by Drew Owens (#6).
 
 ```yaml
 model_binding:

@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/GrizzlyRay/opencomponentcards/schema/v0.1/card.schema.json",
+  "$id": "https://github.com/GrizzlyRay/opencomponentcards/schema/v0.2/card.schema.json",
   "$comment": "Placeholder $id: final repo URL is TBD. Schema license: Apache-2.0. Card data license: CC-BY-4.0.",
-  "title": "OpenComponentCards Card v0.1",
+  "title": "OpenComponentCards Card v0.2",
   "type": "object",
   "additionalProperties": false,
   "required": ["card_version", "id", "part", "parameters", "derivation", "validation", "sources", "provenance", "license"],
   "properties": {
-    "card_version": { "const": "0.1" },
+    "card_version": { "const": "0.2" },
     "card_type": { "const": "part", "description": "Optional. Omit it or use part for a part card. Family cards use family and follow $defs/family_card. See docs/family-cards.md." },
     "id": { "type": "string", "pattern": "^occ:[a-z0-9_-]+/[A-Za-z0-9._-]+@\\d+\\.\\d+\\.\\d+$" },
     "part": {
@@ -132,7 +132,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["card_version", "card_type", "id", "family", "rules", "sources", "provenance", "license"],
       "properties": {
-        "card_version": { "const": "0.1" },
+        "card_version": { "const": "0.2" },
         "card_type": { "const": "family" },
         "id": { "$ref": "#/$defs/card_id" },
         "family": {

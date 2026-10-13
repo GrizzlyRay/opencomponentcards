@@ -4,11 +4,11 @@
 # shapes, so each spread is a uniform over the published limit.
 # Converted to the v0.2 'distributions' list from Drew Owens' original v0.1 card (https://wiki.adom.inc/drew2/community-open-component-cards). Structure only; every value, basis, and attribution is unchanged.
 # Linked to the 0603WAF family card for #2. Every value and attribution is unchanged; the card keeps its own parameters, which override the family.
-card_version: "0.1"
+card_version: "0.2"
 id: occ:resistor/royalohm-0603waf470kt5e@0.1.0
 family:
   id: occ:family/royalohm-0603waf@0.1.0
-  sha256: "5a9f964d8cb7caeede9585127157a7bf3c98230e3435496333d9cb6d6e4cc1a7"
+  sha256: "e291d999689c2d088dc4855350b9cee0996ba74afdaa9bc0b00dbcc98f10ed34"
   select: { resistance: 4.7 }
 part:
   manufacturer: "Royalohm (UNI-ROYAL)"

@@ -1,5 +1,5 @@
 # EXAMPLE values, not measured data. Generic, illustrative part.
-card_version: "0.1"
+card_version: "0.2"
 id: occ:mosfet/generic-nch-30v-power@0.1.0
 part:
   manufacturer: "GENERIC (placeholder)"

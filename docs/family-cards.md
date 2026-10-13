@@ -20,7 +20,7 @@ A part card that links to a family gets the family's data, then its own fields w
 ## A family card
 
 ```yaml
-card_version: "0.1"
+card_version: "0.2"
 card_type: family
 id: occ:family/royalohm-0603waf@0.1.0
 family:
@@ -66,7 +66,7 @@ The full card is [`cards/real/families/royalohm-0603waf.yaml`](../cards/real/fam
 id: occ:resistor/royalohm-0603waf470kt5e@0.1.0
 family:
   id: occ:family/royalohm-0603waf@0.1.0
-  sha256: "5a9f964d..."
+  sha256: "e291d999..."
   select: { resistance: 4.7 }
 ```
 

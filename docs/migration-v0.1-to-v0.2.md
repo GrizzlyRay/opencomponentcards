@@ -1,6 +1,6 @@
 # Migrating from v0.1 to v0.2
 
-v0.2 is still in progress. The schema version stays `"0.1"` until all seven v0.2 issues are done, so cards keep `card_version: "0.1"` for now. This page lists what's changed so far.
+v0.2 was released on 2026-10-13. Cards now use `card_version: "0.2"`, and the schema only accepts `"0.2"`, so change that line in every card along with the steps below. There are two breaking changes: the `distributions` list and the signature file layout. Everything else is an optional addition.
 
 ## Breaking change: `distribution` is now a `distributions` list (#5)
 
@@ -66,7 +66,7 @@ done
 
 Scripts that call `cosign verify-blob --bundle <card>.sigstore.json` need the new path, or use `tools/verify.sh`. See [signer-trust.md](signer-trust.md).
 
-## Other v0.2 changes so far (not breaking)
+## Other v0.2 Changes (Not Breaking)
 
 These are all optional additions, so a v0.1 card only needs the change above.
 

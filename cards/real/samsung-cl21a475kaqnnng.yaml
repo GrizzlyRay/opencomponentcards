@@ -3,7 +3,7 @@
 # Every number below is a datasheet limit with its page. The datasheet gives no distribution
 # shapes, so each spread is a uniform over the published limit.
 # Converted to the v0.2 'distributions' list from Drew Owens' original v0.1 card (https://wiki.adom.inc/drew2/community-open-component-cards). Structure only; every value, basis, and attribution is unchanged.
-card_version: "0.1"
+card_version: "0.2"
 id: occ:capacitor/samsung-cl21a475kaqnnng@0.1.0
 part:
   manufacturer: "Samsung Electro-Mechanics"
