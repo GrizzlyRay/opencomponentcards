@@ -1,0 +1,70 @@
+# Card by Drew Owens (Adom), from https://wiki.adom.inc/drew2/community-open-component-cards. CC-BY-4.0.
+# Real values, taken from the Adom wiki component page https://wiki.adom.inc/adom/cl21a475kaqnnng
+# Every number below is a datasheet limit with its page. The datasheet gives no distribution
+# shapes, so each spread is a uniform over the published limit.
+card_version: "0.1"
+id: occ:capacitor/samsung-cl21a475kaqnnng@0.1.0
+part:
+  manufacturer: "Samsung Electro-Mechanics"
+  mpn: "CL21A475KAQNNNG"
+  category: capacitor
+  description: "4.7 uF, +/-10%, X5R, 25 V, 0805 MLCC"
+  package: "0805"
+model_files: []
+parameters:
+  - name: capacitance
+    unit: F
+    nominal: 4.7e-6
+    distribution:
+      type: uniform
+      applies_to: value
+      kind: population
+      params: { min: 4.23e-6, max: 5.17e-6 }
+      basis: "Datasheet +/-10% (K) tolerance (p.1). Shape not published; uniform over the limit."
+      confidence: low
+    conditions: { frequency_hz: 1000, ac_vrms: 1.0, bias_v: 0, preconditioning: "150 C for 1 h, then 24 h rest (p.2)" }
+    source_refs: [ds1]
+  - name: temperature_factor
+    unit: "1"
+    nominal: 1.0
+    distribution:
+      type: uniform
+      applies_to: value
+      kind: epistemic
+      params: { min: 0.85, max: 1.15 }
+      basis: "X5R: capacitance change within +/-15% from -55 to +85 C (p.2). Only the class limit is published, not a curve."
+      confidence: low
+    conditions: { temperature_min_c: -55, temperature_max_c: 85 }
+    source_refs: [ds1]
+  - name: damp_heat_drift
+    unit: "1"
+    nominal: 0
+    distribution:
+      type: uniform
+      applies_to: value
+      kind: population
+      params: { min: -0.125, max: 0.125 }
+      basis: "Damp heat, 500 h at 40 C and 90 to 95% RH under rated voltage: capacitance change within +/-12.5% (p.2)."
+      confidence: low
+    source_refs: [ds1]
+derivation:
+  kind: data
+  method: "Datasheet limits only. DC bias derating (product manual p.14) and log-time aging (p.12) are described on the source page but not yet extracted as numbers."
+validation:
+  maturity: "1.0"
+  tested_simulators: []
+  comparisons: []
+sources:
+  - ref: ds1
+    kind: datasheet
+    uri: "https://wiki.adom.inc/download/aravk/cl21a475kaqnnng/1.0.0/CL21A475KAQNNNG-datasheet.pdf"
+    sha256: "f8b95d34c191830fa2bd2d9d90a4ab81d7ae2b17189edfd1ea5b59800adc31ef"
+    evidence: "p.1 tolerance, p.2 X5R and reliability table, p.12 aging, p.14 DC bias"
+    confidence: high
+provenance:
+  author: "Adom (wiki.adom.inc), from the adom/cl21a475kaqnnng component page"
+  created: "2026-10-13"
+  previous_version: null
+  signatures: []
+license: CC-BY-4.0
+notes: "Generated from an existing Adom wiki component page, which already cites each spec to a datasheet page."

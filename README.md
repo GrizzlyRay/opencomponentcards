@@ -17,16 +17,17 @@ A **Component Card** is a small YAML file that sits next to an existing model fi
 
 ## What this is not
 
-- Not manufacturer data. The example spreads are assumptions, mostly datasheet limits treated as 3 sigma.
+- Not manufacturer statistics. The example spreads in `cards/examples/` are assumptions, mostly datasheet limits treated as 3 sigma. The real-data cards in `cards/real/` use published datasheet limits.
 - Not a new model format. Cards point at existing model files by hash.
 - Not a finished standard. Fields will change based on feedback.
-- Not proof a model is correct. A signature shows who published a card and that it has not changed.
+- Not proof a model is correct. A signature shows who published a card and that it hasn't changed.
 
 ## Repository layout
 
 ```
 schema/card.schema.json     JSON Schema (draft 2020-12) for v0.1 cards
 cards/examples/*.yaml       Three example cards: resistor, ceramic capacitor, power MOSFET
+cards/real/*.yaml           Real-data cards built from datasheets by Drew Owens (Adom)
 tools/validate.py           Validator: schema plus extra consistency checks
 ```
 
@@ -34,10 +35,16 @@ tools/validate.py           Validator: schema plus extra consistency checks
 
 ```bash
 pip install -r requirements.txt
-python3 tools/validate.py --schema schema/card.schema.json cards/examples/*.yaml
+python3 tools/validate.py --schema schema/card.schema.json cards/examples/*.yaml cards/real/*.yaml
 ```
 
 The validator checks the schema plus rules a schema cannot express: distribution parameters per type, `applies_to` semantics, correlation matrices (symmetric and positive semidefinite), SPDX license ids, units, quoted ISO dates, references, and nominal-vs-mean consistency.
+
+## Real-Data Cards
+
+`cards/real/` holds the first cards built from real datasheet data: a Royalohm 4.7 Ohm 0603 resistor and a Samsung 4.7 uF X5R 0805 capacitor. Every value is a published limit with its datasheet page, and both pass the v0.1 validator unchanged.
+
+A huge thank you to **Drew Owens** at [Adom](https://wiki.adom.inc), who built both cards from Adom wiki component pages within hours of v0.1 going out, and wrote up notes for v0.2. His write-up is [here](https://wiki.adom.inc/drew2/community-open-component-cards), and his suggestions are tracked in the [v0.2 issues](https://github.com/GrizzlyRay/opencomponentcards/issues?q=label%3Av0.2). The cards are CC-BY-4.0, so please credit Drew Owens and Adom when you reuse them.
 
 ## Verifying a Card
 
@@ -59,7 +66,7 @@ Or use the helper: `tools/verify.sh cards/examples/example_resistor.yaml`
 ## Feedback wanted
 
 Open an issue, especially on:
-- the default when a distribution's shape is unknown (uniform, or limit as 3 sigma)
+- the default when a distribution's shape is unknown (Drew's real cards use uniform over the published limit, and that's the leading answer for v0.2)
 - exporting cards to SPICE Monte Carlo syntax (agauss, mc, DEV/LOT)
 - binding card values into vendor subcircuit models
 - mapping to CycloneDX or SPDX
