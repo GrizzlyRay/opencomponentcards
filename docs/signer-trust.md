@@ -75,6 +75,11 @@ Bundles that don't check out (an unknown signer id, the wrong identity, out of s
 
 A signature covers the exact bytes of the card. When a card is edited, the workflow re-signs it with its own identity, but everyone else's signature goes stale and the verifier flags it. Those signers need to re-sign the new version and open a PR with their updated bundle. Until they do, their signature doesn't count, and any policy that relied on it will fail.
 
+## How CI Checks Signatures
+
+- **Validate cards** runs on every push and PR. It always checks the schema, the cards, and the signer policy. If no cards changed, it also runs the strict signature check and the verifier tests. If cards did change, their signatures are stale until they're re-signed, so it only reports signature results as a notice and doesn't fail.
+- **Sign cards** runs on main when cards change. After it re-signs and commits, it runs `tools/verify.sh --strict` on every card plus the verifier tests, so the strict check always runs against the re-signed state.
+
 ## How to Apply
 
 1. Open a new issue and pick the **Become a Signer** form.
