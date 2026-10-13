@@ -5,7 +5,8 @@ Usage: python3 validate.py [--schema PATH] CARD.yaml [CARD.yaml ...]
 Checks the JSON Schema plus rules a schema cannot express:
 per-type distribution params, applies_to semantics, correlation matrix
 (symmetric, unit diagonal, positive semidefinite), SPDX license id,
-units, quoted ISO dates, references, and nominal-vs-mean consistency.
+units, quoted ISO dates, references, nominal-vs-mean consistency,
+and published limits (min <= typ <= max, distribution support inside them).
 Exit code 1 on any ERROR. WARN lines do not fail the run.
 """
 import argparse, datetime, json, math, os, re, sys
@@ -37,6 +38,32 @@ def centre(t, p):
     if t == "uniform": return (p["min"] + p["max"]) / 2
     if t == "triangular": return p["mode"]
     return None
+
+def support(t, p, tr):
+    """Range a value distribution can produce, after truncation."""
+    lo, hi = -math.inf, math.inf
+    if t in ("uniform", "triangular"): lo, hi = p["min"], p["max"]
+    elif t == "lognormal": lo = 0.0
+    elif t == "empirical" and "bins" in p:
+        vs = [b["value"] for b in p["bins"]]; lo, hi = min(vs), max(vs)
+    elif t == "empirical": return None
+    return max(lo, tr.get("min", -math.inf)), min(hi, tr.get("max", math.inf))
+
+def check_limits(n, p, d, refs, E, W):
+    lim = p.get("limits")
+    if not lim: return
+    vals = [(k, lim[k]) for k in ("min", "typ", "max") if k in lim]
+    for (k1, v1), (k2, v2) in zip(vals, vals[1:]):
+        if v1 > v2: E.append(f"{n}: limits need min <= typ <= max, got {k1} {v1:g} > {k2} {v2:g}")
+    if "source_ref" in lim and lim["source_ref"] not in refs: E.append(f"{n}: limits.source_ref {lim['source_ref']!r} is unknown")
+    if d["applies_to"] != "value": return  # offsets live in a different space than the limit
+    sup = support(d["type"], d["params"], d.get("truncate", {}))
+    if sup is None: return
+    lo, hi = sup; eps = 1e-9 * max(abs(lim.get("min", 0)), abs(lim.get("max", 0)), 1e-30)
+    if "min" in lim and lo < lim["min"] - eps:
+        W.append(f"{n}: distribution can go below limits.min {lim['min']:g} (support starts at {lo:g}); add a truncate or check the modeling choice")
+    if "max" in lim and hi > lim["max"] + eps:
+        W.append(f"{n}: distribution can go above limits.max {lim['max']:g} (support ends at {hi:g}); add a truncate or check the modeling choice")
 
 def is_psd(m):
     """Cholesky with a small tolerance; returns True if positive semidefinite."""
@@ -84,6 +111,7 @@ def semantic(c):
                 if not lo <= p["nominal"] <= hi: E.append(f"{n}: truncate excludes nominal")
             elif abs(c0) > 0.5 * (abs(P.get("max", 0)) + abs(P.get("min", 0)) + abs(P.get("sigma", 0)) + 1e-30):
                 W.append(f"{n}: offset distribution centre {c0:g} is far from 0")
+        check_limits(n, p, d, refs, E, W)
         fl = p.get("final_limits")
         if fl:
             if fl["min"] >= fl["max"]: E.append(f"{n}: final_limits min must be < max")

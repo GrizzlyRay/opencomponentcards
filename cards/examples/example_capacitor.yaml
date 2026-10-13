@@ -22,6 +22,7 @@ parameters:
       basis: "Datasheet +/-10% (K) limit treated as 3 sigma, at 25 C, 0 V bias"
       confidence: low
     conditions: { temperature_c: 25, bias_v: 0 }
+    limits: { min: 9.0e-6, typ: 10.0e-6, max: 11.0e-6, source_ref: ds1 }  # EXAMPLE: published +/-10% (K)
     source_refs: [ds1]
   - name: dc_bias_factor     # ceramic caps lose capacitance under DC voltage
     unit: "1"
