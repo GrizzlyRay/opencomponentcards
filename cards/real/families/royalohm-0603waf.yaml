@@ -1,0 +1,83 @@
+# Family card for the Royalohm (UNI-ROYAL) 0603WAF series. CC-BY-4.0.
+# Built only from data in Drew Owens' (Adom) Royalohm card and his page,
+# https://wiki.adom.inc/drew2/community-open-component-cards, which note that one datasheet
+# covers the whole 0603WAF series and that the TCR bracket depends on the value.
+# Nothing here is new data. Facts his data doesn't give for the whole series are listed
+# under not_published instead of being guessed.
+card_version: "0.1"
+card_type: family
+id: occ:family/royalohm-0603waf@0.1.0
+family:
+  manufacturer: "Royalohm (UNI-ROYAL)"
+  series: "0603WAF"
+  category: resistor
+  description: "Royalohm 0603WAF chip resistor series, 0603"
+  package: "0603"
+  selectors:
+    - name: resistance
+      unit: Ohm
+parameters:
+  - name: tcr
+    unit: ppm/K
+    nominal: 0
+    source_refs: [ds1]
+rules:
+  - id: tcr-1-to-10-ohm
+    when: { resistance: { min: 1, max: 10 } }
+    set:
+      tcr:
+        distributions:
+          - scope: total
+            type: uniform
+            applies_to: value
+            kind: epistemic
+            params: { min: -200, max: 200 }
+            basis: "Datasheet TCR +/-200 ppm/K, the 0603 bracket for 1 to 10 Ohm (p.3). Shape not published; uniform over the limit."
+            confidence: low
+        limits: { min: -200, max: 200, source_ref: ds1 }
+  - id: tcr-above-10-ohm
+    when: { resistance: { gt: 10 } }
+    set:
+      tcr:
+        distributions:
+          - scope: total
+            type: uniform
+            applies_to: value
+            kind: epistemic
+            params: { min: -100, max: 100 }
+            basis: "Datasheet TCR +/-100 ppm/K, the 0603 bracket above 10 Ohm (p.3). Shape not published; uniform over the limit."
+            confidence: low
+        limits: { min: -100, max: 100, source_ref: ds1 }
+not_published:
+  - "TCR below 1 Ohm: Drew's data gives brackets for 1 to 10 Ohm and above 10 Ohm only, so no rule covers it."
+  - "The resistance range the series covers."
+  - "Series-wide tolerance and power rating: Drew's data gives +/-1% and 1/10 W for 0603WAF470KT5E only, so they stay on the part card."
+  - "Load-life drift as a family parameter: +/-(1% + 0.05 Ohm) depends on the value, so each part card states it."
+  - "Distribution shapes: the datasheet publishes limits only."
+derivation:
+  kind: physics
+  method: "R(T) = R25 * (1 + TCR * 1e-6 * (T - 25)); TCR bracket chosen by resistance"
+validation:
+  maturity: "1.0"
+  tested_simulators: []
+  comparisons: []
+sources:
+  - ref: ds1
+    kind: datasheet
+    uri: "https://wiki.adom.inc/download/aravk/0603waf470kt5e/1.0.0/0603WAF470KT5E-datasheet.pdf"
+    sha256: "6344d3f6a60ea3d3a4c4726f3562df5847a0e5910ce0bd4356328c1363a25f0d"
+    evidence: "p.3 TCR table (series datasheet, per Drew Owens' page)"
+    confidence: high
+  - ref: drew
+    kind: derived
+    derived_from: [ds1]
+    uri: "https://wiki.adom.inc/drew2/community-open-component-cards"
+    evidence: "v0.2 note 2: the TCR bracket for the 0603WAF series"
+    confidence: high
+provenance:
+  author: "Jacob Warren, from Drew Owens' (Adom) Royalohm card and his page"
+  created: "2026-10-13"
+  previous_version: null
+  signatures: []
+license: CC-BY-4.0
+notes: "Family data by Drew Owens (Adom), CC-BY-4.0. The TCR bracket is from his card and v0.2 note 2."

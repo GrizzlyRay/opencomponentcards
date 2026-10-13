@@ -28,9 +28,12 @@ A **Component Card** is a small YAML file that sits next to an existing model fi
 schema/card.schema.json     JSON Schema (draft 2020-12) for v0.1 cards
 cards/examples/*.yaml       Three example cards: resistor, ceramic capacitor, power MOSFET
 cards/real/*.yaml           Real-data cards built from datasheets by Drew Owens (Adom)
+cards/real/families/*.yaml  Family cards: shared series data plus value-dependent rules
 tools/validate.py           Validator: schema plus extra consistency checks
+tools/resolve.py            Merges a family card and a part card into one resolved card
 docs/conditions.md          Standard keys for conditions
 docs/lot-device-spread.md   Lot vs device spread in the distributions list
+docs/family-cards.md        Family cards and value-dependent rules
 docs/migration-v0.1-to-v0.2.md  What changed since v0.1 and how to convert cards
 ```
 
@@ -59,7 +62,7 @@ limits: { min: 9900, typ: 10000, max: 10100, source_ref: ds1 }
 
 ## Real-Data Cards
 
-`cards/real/` holds the first cards built from real datasheet data: a Royalohm 4.7 Ohm 0603 resistor and a Samsung 4.7 uF X5R 0805 capacitor. Every value is a published limit with its datasheet page. Both were converted to the v0.2 `distributions` list (structure only, values unchanged) and pass the validator.
+`cards/real/` holds the first cards built from real datasheet data: a Royalohm 4.7 Ohm 0603 resistor and a Samsung 4.7 uF X5R 0805 capacitor. Every value is a published limit with its datasheet page. Both were converted to the v0.2 `distributions` list (structure only, values unchanged) and pass the validator. `cards/real/families/royalohm-0603waf.yaml` is a family card for the whole 0603WAF series, built only from Drew's data, and the Royalohm part card now links to it.
 
 A huge thank you to **Drew Owens** at [Adom](https://wiki.adom.inc), who built both cards from Adom wiki component pages within hours of v0.1 going out, and wrote up notes for v0.2. His write-up is [here](https://wiki.adom.inc/drew2/community-open-component-cards), and his suggestions are tracked in the [v0.2 issues](https://github.com/GrizzlyRay/opencomponentcards/issues?q=label%3Av0.2). The cards are CC-BY-4.0, so please credit Drew Owens and Adom when you reuse them.
 
@@ -109,3 +112,4 @@ CycloneDX and SPDX 3.0, IBIS and the IBIS Quality Specification, CMC compact mod
 - Made `model_binding.transform` machine-readable, with `offset`, `scale`, `replace`, and `affine` types plus an optional `note`. Plain string transforms still pass but get a warning (#6, suggested by Drew Owens). See [docs/model-binding.md](docs/model-binding.md).
 - Added a `derived` source kind with a `derived_from` list, so a card can record a chain like "wiki page X cites datasheet p.3". The validator checks that the refs exist, that there's no cycle, and warns when a derived source doesn't trace back to a datasheet, measurement, or standard (#4, suggested by Drew Owens). See [docs/derived-sources.md](docs/derived-sources.md).
 - **Breaking:** replaced the single `distribution` with a `distributions` list. Each entry has a `scope` of `total`, `lot`, or `device`: either one `total`, or lot and/or device with no total, mirroring SPICE Monte Carlo `LOT` and `DEV`. v0.1 cards with `distribution` now fail with a pointer to the migration guide, and every card in the repo was converted (#5, suggested by Drew Owens). See [docs/lot-device-spread.md](docs/lot-device-spread.md) and [docs/migration-v0.1-to-v0.2.md](docs/migration-v0.1-to-v0.2.md).
+- Added family cards. A `card_type: family` card holds what a whole series shares, plus `rules` with `when` conditions on selectors like resistance, so the Royalohm 0603WAF TCR bracket (+/-200 ppm/K for 1 to 10 Ohm, +/-100 ppm/K above 10 Ohm) lives in one place. Part cards can link to a family with an optional `family` reference and override any field. `tools/resolve.py` merges the two, and the validator checks the link, the sha256, overlapping rules, and the resolved card. The design follows prior art from JEDEC JEP30 Family objects and JITX's parametric component families (#2, suggested by Drew Owens). See [docs/family-cards.md](docs/family-cards.md).
