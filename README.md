@@ -29,6 +29,7 @@ schema/card.schema.json     JSON Schema (draft 2020-12) for v0.1 cards
 cards/examples/*.yaml       Three example cards: resistor, ceramic capacitor, power MOSFET
 cards/real/*.yaml           Real-data cards built from datasheets by Drew Owens (Adom)
 tools/validate.py           Validator: schema plus extra consistency checks
+docs/conditions.md          Standard keys for conditions
 ```
 
 ## Quick start
@@ -49,6 +50,10 @@ limits: { min: 9900, typ: 10000, max: 10100, source_ref: ds1 }
 ```
 
 `min`, `typ`, and `max` are each optional numbers in the parameter's unit, but at least one is needed. You can add `conditions` if the limit's published at different conditions than the parameter. This way two people can model the same datasheet fact differently and still point at the same limit. The validator errors if `min <= typ <= max` doesn't hold, and warns if a value distribution's support or truncation goes past the limits. It's optional, so v0.1 cards without it stay valid. Suggested by Drew Owens ([#1](https://github.com/GrizzlyRay/opencomponentcards/issues/1)).
+
+## Standard Conditions
+
+`conditions` and `limits.conditions` share a small vocabulary of standard keys with the unit in the name, like `temperature_c`, `frequency_hz`, `ac_vrms`, `dc_bias_v`, and a free-text `preconditioning`. Other keys still work, but the validator warns and suggests the closest standard key. See [docs/conditions.md](docs/conditions.md) for the full list. Suggested by Drew Owens ([#3](https://github.com/GrizzlyRay/opencomponentcards/issues/3)).
 
 ## Real-Data Cards
 
@@ -98,3 +103,4 @@ CycloneDX and SPDX 3.0, IBIS and the IBIS Quality Specification, CMC compact mod
 **v0.2 (in progress).** The schema version stays 0.1 until all seven v0.2 issues are done.
 
 - Added an optional `limits` field for published datasheet limits (#1, suggested by Drew Owens).
+- Added a standard vocabulary for `conditions` keys, with units in the key name. Non-standard keys still pass but get a warning with the closest match (#3, suggested by Drew Owens). See [docs/conditions.md](docs/conditions.md).
