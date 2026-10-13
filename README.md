@@ -30,6 +30,8 @@ cards/examples/*.yaml       Three example cards: resistor, ceramic capacitor, po
 cards/real/*.yaml           Real-data cards built from datasheets by Drew Owens (Adom)
 tools/validate.py           Validator: schema plus extra consistency checks
 docs/conditions.md          Standard keys for conditions
+docs/lot-device-spread.md   Lot vs device spread in the distributions list
+docs/migration-v0.1-to-v0.2.md  What changed since v0.1 and how to convert cards
 ```
 
 ## Quick start
@@ -43,13 +45,13 @@ The validator checks the schema plus rules a schema cannot express: distribution
 
 ## Published Limits
 
-Each parameter can carry an optional `limits` block with the published datasheet numbers, kept apart from the modeling choice in `distribution`:
+Each parameter can carry an optional `limits` block with the published datasheet numbers, kept apart from the modeling choice in `distributions`:
 
 ```yaml
 limits: { min: 9900, typ: 10000, max: 10100, source_ref: ds1 }
 ```
 
-`min`, `typ`, and `max` are each optional numbers in the parameter's unit, but at least one is needed. You can add `conditions` if the limit's published at different conditions than the parameter. This way two people can model the same datasheet fact differently and still point at the same limit. The validator errors if `min <= typ <= max` doesn't hold, and warns if a value distribution's support or truncation goes past the limits. It's optional, so v0.1 cards without it stay valid. Suggested by Drew Owens ([#1](https://github.com/GrizzlyRay/opencomponentcards/issues/1)).
+`min`, `typ`, and `max` are each optional numbers in the parameter's unit, but at least one is needed. You can add `conditions` if the limit's published at different conditions than the parameter. This way two people can model the same datasheet fact differently and still point at the same limit. The validator errors if `min <= typ <= max` doesn't hold, and warns if a value distribution's support or truncation goes past the limits. It's optional, so cards without it stay valid. Suggested by Drew Owens ([#1](https://github.com/GrizzlyRay/opencomponentcards/issues/1)).
 
 ## Standard Conditions
 
@@ -57,7 +59,7 @@ limits: { min: 9900, typ: 10000, max: 10100, source_ref: ds1 }
 
 ## Real-Data Cards
 
-`cards/real/` holds the first cards built from real datasheet data: a Royalohm 4.7 Ohm 0603 resistor and a Samsung 4.7 uF X5R 0805 capacitor. Every value is a published limit with its datasheet page, and both pass the v0.1 validator unchanged.
+`cards/real/` holds the first cards built from real datasheet data: a Royalohm 4.7 Ohm 0603 resistor and a Samsung 4.7 uF X5R 0805 capacitor. Every value is a published limit with its datasheet page. Both were converted to the v0.2 `distributions` list (structure only, values unchanged) and pass the validator.
 
 A huge thank you to **Drew Owens** at [Adom](https://wiki.adom.inc), who built both cards from Adom wiki component pages within hours of v0.1 going out, and wrote up notes for v0.2. His write-up is [here](https://wiki.adom.inc/drew2/community-open-component-cards), and his suggestions are tracked in the [v0.2 issues](https://github.com/GrizzlyRay/opencomponentcards/issues?q=label%3Av0.2). The cards are CC-BY-4.0, so please credit Drew Owens and Adom when you reuse them.
 
@@ -100,9 +102,10 @@ CycloneDX and SPDX 3.0, IBIS and the IBIS Quality Specification, CMC compact mod
 
 ## Changelog
 
-**v0.2 (in progress).** The schema version stays 0.1 until all seven v0.2 issues are done.
+**v0.2 (in progress).** The schema version stays 0.1 until all seven v0.2 issues are done. v0.2 has one breaking change so far; see [docs/migration-v0.1-to-v0.2.md](docs/migration-v0.1-to-v0.2.md).
 
 - Added an optional `limits` field for published datasheet limits (#1, suggested by Drew Owens).
 - Added a standard vocabulary for `conditions` keys, with units in the key name. Non-standard keys still pass but get a warning with the closest match (#3, suggested by Drew Owens). See [docs/conditions.md](docs/conditions.md).
 - Made `model_binding.transform` machine-readable, with `offset`, `scale`, `replace`, and `affine` types plus an optional `note`. Plain string transforms still pass but get a warning (#6, suggested by Drew Owens). See [docs/model-binding.md](docs/model-binding.md).
 - Added a `derived` source kind with a `derived_from` list, so a card can record a chain like "wiki page X cites datasheet p.3". The validator checks that the refs exist, that there's no cycle, and warns when a derived source doesn't trace back to a datasheet, measurement, or standard (#4, suggested by Drew Owens). See [docs/derived-sources.md](docs/derived-sources.md).
+- **Breaking:** replaced the single `distribution` with a `distributions` list. Each entry has a `scope` of `total`, `lot`, or `device`: either one `total`, or lot and/or device with no total, mirroring SPICE Monte Carlo `LOT` and `DEV`. v0.1 cards with `distribution` now fail with a pointer to the migration guide, and every card in the repo was converted (#5, suggested by Drew Owens). See [docs/lot-device-spread.md](docs/lot-device-spread.md) and [docs/migration-v0.1-to-v0.2.md](docs/migration-v0.1-to-v0.2.md).

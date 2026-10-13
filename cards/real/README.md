@@ -11,6 +11,8 @@ Both cards were built by **Drew Owens** at **Adom** ([wiki.adom.inc](https://wik
 
 The datasheets don't publish distribution shapes, so each spread is a uniform over the published limit.
 
+Both cards were converted from Drew's original v0.1 cards to the v0.2 `distributions` list. Only the structure changed; every value, basis, and attribution is the same. See [docs/migration-v0.1-to-v0.2.md](../../docs/migration-v0.1-to-v0.2.md).
+
 License: CC-BY-4.0. Please credit Drew Owens and Adom (wiki.adom.inc) when you reuse these cards.
 
 Thanks, Drew!

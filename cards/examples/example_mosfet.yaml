@@ -22,27 +22,29 @@ parameters:
       param: VTO
       transform: { type: offset, reference: 1.8, param_unit: V }   # VTO_new = VTO_file + (vth_sample - 1.8)
       note: "Datasheet Vth (Id = 250 uA, Vds = Vgs) is not the same quantity as VTO in a vendor subcircuit. Apply the sample as a shift, never as VTO itself."
-    distribution:
-      type: normal
-      applies_to: value
-      kind: population
-      params: { mean: 1.8, sigma: 0.2 }
-      truncate: { min: 1.2, max: 2.4 }
-      basis: "Datasheet min/max treated as 3 sigma"
-      confidence: low
+    distributions:
+      - scope: total
+        type: normal
+        applies_to: value
+        kind: population
+        params: { mean: 1.8, sigma: 0.2 }
+        truncate: { min: 1.2, max: 2.4 }
+        basis: "Datasheet min/max treated as 3 sigma"
+        confidence: low
     conditions: { temperature_c: 25, id_a: 250.0e-6, vds_eq_vgs: true }
     limits: { min: 1.2, typ: 1.8, max: 2.4, source_ref: ds1 }  # EXAMPLE: published Vth min/typ/max
     source_refs: [ds1]
   - name: vth_tempco
     unit: V/K
     nominal: -0.004
-    distribution:
-      type: uniform
-      applies_to: value
-      kind: epistemic
-      params: { min: -0.005, max: -0.003 }
-      basis: "Typical power MOSFET range of about -3 to -5 mV/K"
-      confidence: low
+    distributions:
+      - scope: total
+        type: uniform
+        applies_to: value
+        kind: epistemic
+        params: { min: -0.005, max: -0.003 }
+        basis: "Typical power MOSFET range of about -3 to -5 mV/K"
+        confidence: low
     source_refs: [est1]
   - name: rds_on             # on-resistance; sets conduction loss
     unit: Ohm
@@ -51,14 +53,15 @@ parameters:
       param: RD
       transform: { type: offset, reference: 0.005, param_unit: Ohm }   # RD_new = RD_file + (rds_on_sample - 0.005)
       note: "Rds(on) is split across RD, RS, and channel KP in most subcircuits. A drain-resistor shift is only valid at the stated Vgs and Id."
-    distribution:
-      type: lognormal
-      applies_to: value
-      kind: population
-      params: { mu: -5.298, sigma: 0.08 }   # ln(0.005) = -5.298, about 8% spread
-      truncate: { max: 0.0065 }
-      basis: "Typ as median, datasheet max treated as about 3 sigma"
-      confidence: low
+    distributions:
+      - scope: total
+        type: lognormal
+        applies_to: value
+        kind: population
+        params: { mu: -5.298, sigma: 0.08 }   # ln(0.005) = -5.298, about 8% spread
+        truncate: { max: 0.0065 }
+        basis: "Typ as median, datasheet max treated as about 3 sigma"
+        confidence: low
     conditions: { temperature_c: 25, vgs_v: 10, id_a: 20 }
     limits: { typ: 0.005, max: 0.0065, source_ref: ds1 }  # EXAMPLE: published Rds(on) typ/max
     dependence:
