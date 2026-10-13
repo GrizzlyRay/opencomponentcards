@@ -77,12 +77,15 @@
         "required": ["ref", "kind", "confidence"],
         "properties": {
           "ref": { "type": "string" },
-          "kind": { "enum": ["datasheet", "measurement", "paper", "standard", "application_note", "expert_estimate"] },
+          "kind": { "enum": ["datasheet", "measurement", "paper", "standard", "application_note", "expert_estimate", "derived"] },
+          "derived_from": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" }, "description": "Refs of the upstream sources this one took its data from. Required when kind is derived." },
           "uri": { "type": "string" },
           "sha256": { "$ref": "#/$defs/sha256" },
           "evidence": { "type": "string", "description": "Where exactly, e.g. 'Table 3, p.2'" },
           "confidence": { "$ref": "#/$defs/confidence" }
-        }
+        },
+        "if": { "properties": { "kind": { "const": "derived" } } },
+        "then": { "required": ["derived_from"] }
       }
     },
     "provenance": {
