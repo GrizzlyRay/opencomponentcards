@@ -92,3 +92,9 @@ CycloneDX and SPDX 3.0, IBIS and the IBIS Quality Specification, CMC compact mod
 
 - Schema, code, and tools: [Apache-2.0](LICENSE)
 - Card data (`cards/`): [CC-BY-4.0](LICENSE-DATA)
+
+## Changelog
+
+**v0.2 (in progress).** The schema version stays 0.1 until all seven v0.2 issues are done.
+
+- Added an optional `limits` field for published datasheet limits (#1, suggested by Drew Owens).
