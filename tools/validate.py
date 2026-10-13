@@ -127,6 +127,39 @@ def interp(points, x=None):
     """Curve values at the given points (linear interpolation is assumed between them)."""
     return [v for _, v in sorted((p["x"], p["value"]) for p in points)]
 
+PRIMARY_KINDS = {"datasheet", "measurement", "standard"}
+
+def check_sources(srcs, E, W):
+    """derived_from must name known refs, form no cycle, and reach a primary source."""
+    by = {}
+    for s in srcs:
+        if s["ref"] in by: E.append(f"sources: duplicate ref {s['ref']!r}")
+        by[s["ref"]] = s
+    for s in srcs:
+        r, up = s["ref"], s.get("derived_from", [])
+        if up and s["kind"] != "derived": W.append(f"sources.{r}: derived_from is set but kind is {s['kind']!r}, not 'derived'")
+        for u in up:
+            if u not in by: E.append(f"sources.{r}: derived_from {u!r} is unknown")
+            elif u == r: E.append(f"sources.{r}: derived_from points to itself")
+    state = {}
+    def visit(r, path):
+        if state.get(r) == 1:
+            E.append("sources: derived_from cycle " + " -> ".join(path[path.index(r):] + [r])); return
+        if state.get(r) == 2: return
+        state[r] = 1
+        for u in by[r].get("derived_from", []):
+            if u in by: visit(u, path + [r])
+        state[r] = 2
+    for r in by: visit(r, [])
+    def reaches_primary(r, seen):
+        if r in seen or r not in by: return False
+        s = by[r]
+        if s["kind"] in PRIMARY_KINDS: return True
+        return any(reaches_primary(u, seen | {r}) for u in s.get("derived_from", []))
+    for r, s in by.items():
+        if s["kind"] == "derived" and not reaches_primary(r, set()):
+            W.append(f"sources.{r}: derived source has no upstream primary source (datasheet, measurement, or standard)")
+
 def semantic(c):
     E, W = [], []
     params = c.get("parameters", [])
@@ -171,6 +204,7 @@ def semantic(c):
             W.append(f"{n}: offset distribution without a dependence curve; offset is applied to nominal")
         for s in p["source_refs"]:
             if s not in refs: E.append(f"{n}: unknown source_ref {s!r}")
+    check_sources(c.get("sources", []), E, W)
     corr = c.get("correlation")
     if corr:
         cp, m = corr["parameters"], corr["matrix"]; k = len(cp)
