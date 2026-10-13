@@ -56,5 +56,6 @@ These are all optional additions, so a v0.1 card only needs the change above.
 - **Standard `conditions` keys** (#3): unit-in-name keys like `temperature_c` and `dc_bias_v`. Other keys still pass with a warning. `bias_v` stays as an accepted alias. See [conditions.md](conditions.md).
 - **Structured `model_binding.transform`** (#6): `offset`, `scale`, `replace`, or `affine`. Plain-text transforms still pass with a warning. See [model-binding.md](model-binding.md).
 - **`derived` source kind** (#4): a `derived_from` chain from a wiki page or tool back to a datasheet. See [derived-sources.md](derived-sources.md).
+- **Family cards** (#2): a new `card_type: family` card holds what a series shares plus value-dependent `rules`, and a part card can point at it with an optional `family: {id, sha256, select}`. Cards without `family` work exactly as before. If you edit a family card, update the `sha256` in the part cards that pin it. See [family-cards.md](family-cards.md).
 
 All suggested by Drew Owens (Adom).

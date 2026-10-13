@@ -8,6 +8,7 @@
   "required": ["card_version", "id", "part", "parameters", "derivation", "validation", "sources", "provenance", "license"],
   "properties": {
     "card_version": { "const": "0.1" },
+    "card_type": { "const": "part", "description": "Optional. Omit it or use part for a part card. Family cards use family and follow $defs/family_card. See docs/family-cards.md." },
     "id": { "type": "string", "pattern": "^occ:[a-z0-9_-]+/[A-Za-z0-9._-]+@\\d+\\.\\d+\\.\\d+$" },
     "part": {
       "type": "object",
@@ -113,9 +114,60 @@
       }
     },
     "license": { "type": "string", "pattern": "^[A-Za-z0-9.+-]+$", "description": "SPDX license id for the card data, normally CC-BY-4.0" },
-    "notes": { "type": "string" }
+    "notes": { "type": "string" },
+    "family": { "$ref": "#/$defs/family_ref" }
   },
   "$defs": {
+    "card_id": { "type": "string", "pattern": "^occ:[a-z0-9_-]+/[A-Za-z0-9._-]+@\\d+\\.\\d+\\.\\d+$" },
+    "family_ref": {
+      "type": "object", "additionalProperties": false, "required": ["id"],
+      "description": "Link from a part card to the family card it inherits from. The part's own fields override the family's. See docs/family-cards.md.",
+      "properties": {
+        "id": { "$ref": "#/$defs/card_id" },
+        "sha256": { "$ref": "#/$defs/sha256", "description": "Optional sha256 of the family card file. If set, the validator checks it, so an edited family can't silently change this part." },
+        "select": { "type": "object", "additionalProperties": { "type": ["number", "string"] }, "description": "Selector values for this part, e.g. {resistance: 4.7}. A missing numeric selector falls back to the nominal of the parameter with the same name." }
+      }
+    },
+    "family_card": {
+      "type": "object", "additionalProperties": false,
+      "required": ["card_version", "card_type", "id", "family", "rules", "sources", "provenance", "license"],
+      "properties": {
+        "card_version": { "const": "0.1" },
+        "card_type": { "const": "family" },
+        "id": { "$ref": "#/$defs/card_id" },
+        "family": {
+          "type": "object", "additionalProperties": false, "required": ["manufacturer", "series", "category", "selectors"],
+          "properties": {
+            "manufacturer": { "type": "string" },
+            "series": { "type": "string" },
+            "category": { "$ref": "#/properties/part/properties/category" },
+            "description": { "type": "string" },
+            "package": { "type": "string" },
+            "selectors": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }, "unit": { "$ref": "#/$defs/unit" }, "values": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Allowed values for a categorical selector, such as packages." } } } }
+          }
+        },
+        "model_files": { "$ref": "#/properties/model_files" },
+        "parameters": { "type": "array", "items": { "$ref": "#/$defs/family_parameter" } },
+        "rules": {
+          "type": "array",
+          "description": "Value-dependent overrides. A rule applies when every selector in 'when' matches. Numeric ranges use min/max (inclusive) and gt/lt (exclusive). Categorical selectors use 'in'.",
+          "items": { "type": "object", "additionalProperties": false, "required": ["id", "when", "set"], "properties": {
+            "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+            "when": { "type": "object", "minProperties": 1, "additionalProperties": { "oneOf": [
+              { "type": "object", "additionalProperties": false, "minProperties": 1, "properties": { "min": { "type": "number" }, "max": { "type": "number" }, "gt": { "type": "number" }, "lt": { "type": "number" } } },
+              { "type": "object", "additionalProperties": false, "required": ["in"], "properties": { "in": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } } } } ] } },
+            "set": { "type": "object", "minProperties": 1, "additionalProperties": { "$ref": "#/$defs/parameter_override" } },
+            "note": { "type": "string" } } }
+        },
+        "derivation": { "$ref": "#/properties/derivation" },
+        "validation": { "$ref": "#/properties/validation" },
+        "sources": { "$ref": "#/properties/sources" },
+        "provenance": { "$ref": "#/properties/provenance" },
+        "license": { "$ref": "#/properties/license" },
+        "not_published": { "type": "array", "items": { "type": "string" }, "description": "Facts this family card leaves out because its sources don't state them." },
+        "notes": { "type": "string" }
+      }
+    },
     "transform": {
       "type": "object",
       "additionalProperties": false,
@@ -154,10 +206,11 @@
     "sha256": { "type": "string", "pattern": "^([a-f0-9]{64}|PLACEHOLDER)$" },
     "confidence": { "enum": ["low", "medium", "high"] },
     "unit": { "enum": ["Ohm", "F", "H", "V", "A", "W", "s", "Hz", "K", "degC", "1", "ppm/K", "V/K", "1/K"] },
-    "parameter": {
+    "parameter": { "$ref": "#/$defs/parameter_fields", "required": ["name", "unit", "nominal", "distributions", "source_refs"], "unevaluatedProperties": false },
+    "family_parameter": { "$ref": "#/$defs/parameter_fields", "required": ["name", "unit"], "unevaluatedProperties": false, "description": "A family parameter. It can leave out nominal, distributions, or source_refs when rules or parts supply them. The resolved card must be complete." },
+    "parameter_override": { "$ref": "#/$defs/parameter_fields", "not": { "required": ["name"] }, "unevaluatedProperties": false, "description": "Partial parameter in a family rule. These fields replace the family parameter fields." },
+    "parameter_fields": {
       "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "unit", "nominal", "distributions", "source_refs"],
       "properties": {
         "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "unit": { "$ref": "#/$defs/unit" },

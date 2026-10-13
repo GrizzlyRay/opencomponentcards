@@ -8,6 +8,9 @@ Both cards were built by **Drew Owens** at **Adom** ([wiki.adom.inc](https://wik
 |---|---|---|
 | `royalohm-0603waf470kt5e.yaml` | Royalohm 0603WAF470KT5E, 4.7 Ohm 1% 0603 resistor | [adom/0603waf470kt5e](https://wiki.adom.inc/adom/0603waf470kt5e) |
 | `samsung-cl21a475kaqnnng.yaml` | Samsung CL21A475KAQNNNG, 4.7 uF 10% X5R 25 V 0805 MLCC | [adom/cl21a475kaqnnng](https://wiki.adom.inc/adom/cl21a475kaqnnng) |
+| `families/royalohm-0603waf.yaml` | Royalohm 0603WAF series family card: the TCR bracket by value | [Drew's page](https://wiki.adom.inc/drew2/community-open-component-cards) |
+
+The family card was built from Drew's Royalohm card and his v0.2 note 2 only. The Royalohm part card links to it, and keeps all its own values. See [docs/family-cards.md](../../docs/family-cards.md).
 
 The datasheets don't publish distribution shapes, so each spread is a uniform over the published limit.
 

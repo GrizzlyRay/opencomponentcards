@@ -10,6 +10,11 @@ published limits (min <= typ <= max, distribution support inside them),
 standard conditions keys (non-standard keys warn), and model_binding
 transforms (required fields per type, unit match; free text warns),
 derived source chains, and lot/device scopes in the distributions list.
+Family cards (card_type: family) are checked for declared selectors, rule
+overrides that target real parameters, and rules that overlap ambiguously,
+and each rule is resolved and validated. Part cards with a family ref are
+resolved first (the family must exist under cards/ and match its sha256),
+then the resolved card is validated. See docs/family-cards.md.
 v0.1 'distribution' and 'spread_components' fail with a pointer to
 docs/migration-v0.1-to-v0.2.md.
 Exit code 1 on any ERROR. WARN lines do not fail the run.
@@ -17,6 +22,9 @@ Exit code 1 on any ERROR. WARN lines do not fail the run.
 import argparse, datetime, difflib, json, math, os, re, sys
 import yaml
 from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import resolve
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REQ = {"normal": [{"mean", "sigma"}, {"mean", "sigma_pct"}], "uniform": [{"min", "max"}],
@@ -271,27 +279,71 @@ def semantic(c):
         if mf["sha256"] == "PLACEHOLDER": W.append(f"placeholder sha256 for model file {mf['uri']}")
     return E, W
 
-def main():
+def check_family_card(raw, VF, VP, E, W):
+    """Family card: schema, rule structure, then each rule resolved and validated as a part."""
+    E += [f"schema {'/'.join(map(str, e.absolute_path)) or '$'}: {e.message[:160]}" for e in VF.iter_errors(raw)]
+    if E: return
+    e2, w2 = resolve.check_family(raw); E += e2; W += w2
+    if E: return
+    f = raw["family"]
+    stub = {"manufacturer": f["manufacturer"], "mpn": f"{f['series']} (family)", "category": f["category"]}
+    points = [("base", [])] + [(r["id"], [r]) for r in raw["rules"]]
+    for name, rules in points:
+        params = {p["name"]: dict(p) for p in raw.get("parameters", [])}
+        for r in rules:
+            for pn, ov in r["set"].items(): params[pn].update(ov)
+        done = [p for p in params.values() if {"nominal", "distributions", "source_refs"} <= set(p)]
+        if not done: continue
+        card = {k: raw[k] for k in ("card_version", "derivation", "validation", "sources", "provenance", "license") if k in raw}
+        card.update({"id": raw["id"], "part": stub, "parameters": done})
+        card.setdefault("derivation", {"kind": "physics", "method": "family"}); card.setdefault("validation", {"maturity": "1.0"})
+        tag = "family" if name == "base" else f"rules.{name}"
+        es = [f"{tag}: schema {'/'.join(map(str, e.absolute_path)) or '$'}: {e.message[:160]}" for e in VP.iter_errors(card)]
+        if not es:
+            e3, w3 = semantic(card); es = [f"{tag}: {x}" for x in e3]
+            W += [f"{tag}: {x}" for x in w3 if name == "base" or any(x.startswith(pn) for r in rules for pn in r["set"])]
+        E += es
+
+def check_part_with_family(raw, VP, E, W):
+    """Resolve family + part, then validate the resolved card."""
+    try:
+        card, info, w = resolve.resolve_part(raw)
+    except resolve.ResolveError as e:
+        E.append(f"family: {e}"); return
+    W += w
+    for n in info["incomplete"]:
+        E.append(f"{n}: incomplete after resolving {raw['family']['id']} at {info['select']} (rules applied: {info['applied'] or 'none'}); no rule covers this point, so the part card must give it")
+    if E: return
+    E += [f"resolved: schema {'/'.join(map(str, e.absolute_path)) or '$'}: {e.message[:160]}" for e in VP.iter_errors(card)]
+    if not E:
+        e2, w2 = semantic(card); E += e2; W += w2
+
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--schema", default=None)
     ap.add_argument("cards", nargs="+")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     sp = a.schema or next(p for p in [os.path.join(HERE, "card.schema.json"), os.path.join(HERE, "..", "schema", "card.schema.json")] if os.path.exists(p))
     schema = json.load(open(sp))
     Draft202012Validator.check_schema(schema)
     print(f"schema {os.path.basename(sp)}: valid JSON Schema draft 2020-12")
     V = Draft202012Validator(schema)
+    reg = Registry().with_resource(schema["$id"], Resource.from_contents(schema))
+    VF = Draft202012Validator({"$ref": schema["$id"] + "#/$defs/family_card"}, registry=reg)
     failed = 0
     for f in a.cards:
         raw = yaml.safe_load(open(f))
         E = [f"unquoted YAML date at {p} (quote it, e.g. \"2026-10-13\")" for p in find_dates(raw)]
         if not E: E = check_v01(raw)
-        if not E:
+        W = []
+        if not E and resolve.is_family(raw):
+            check_family_card(raw, VF, V, E, W)
+        elif not E and isinstance(raw, dict) and "family" in raw:
+            check_part_with_family(raw, V, E, W)
+        elif not E:
             E += [f"schema {'/'.join(map(str, e.absolute_path)) or '$'}: {e.message[:160]}" for e in V.iter_errors(raw)]
             W = []
             if not E: e2, W = semantic(raw); E += e2  # semantic rules assume a schema-valid card
-        else:
-            W = []
         print(f"\n{f}: {'PASS' if not E else 'FAIL'}" + (f" ({len(W)} warning(s))" if W else ""))
         for e in E: print("  ERROR", e)
         for w in W: print("  WARN ", w)
