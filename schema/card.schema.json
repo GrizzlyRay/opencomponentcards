@@ -113,6 +113,19 @@
     "notes": { "type": "string" }
   },
   "$defs": {
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Machine-readable transform. x is the sampled card value, P_file is the value in the model file, P_new is the value written back.",
+      "properties": {
+        "type": { "enum": ["offset", "scale", "replace", "affine"], "description": "offset: P_new = P_file + (x - reference). scale: P_new = P_file * (x / reference). replace: P_new = x. affine: P_new = factor * x + offset." },
+        "reference": { "type": "number", "description": "offset and scale: the card value the model file corresponds to. Defaults to the parameter's nominal." },
+        "factor": { "type": "number", "description": "affine only: multiplier on the sampled value" },
+        "offset": { "type": "number", "description": "affine only: added after the factor, in param_unit" },
+        "param_unit": { "type": "string", "description": "Unit of the model parameter, checked against the card unit where the type allows it" }
+      }
+    },
     "conditions": {
       "type": "object",
       "description": "Test conditions. Standard keys carry units in the name (see docs/conditions.md). Other keys are allowed; the validator warns on them.",
@@ -185,11 +198,14 @@
         "model_binding": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["param", "transform", "note"],
+          "required": ["param", "transform"],
           "properties": {
             "param": { "type": "string", "description": "Parameter name inside the referenced model file" },
-            "transform": { "type": "string", "description": "How a sampled card value changes that model parameter, e.g. an offset" },
-            "note": { "type": "string" }
+            "transform": {
+              "description": "How a sampled card value changes that model parameter. The structured form is preferred. A plain string is still accepted but deprecated (the validator warns). See docs/model-binding.md.",
+              "oneOf": [ { "type": "string" }, { "$ref": "#/$defs/transform" } ]
+            },
+            "note": { "type": "string", "description": "Optional free-text explanation for humans" }
           }
         },
         "source_refs": { "type": "array", "minItems": 1, "items": { "type": "string" } }

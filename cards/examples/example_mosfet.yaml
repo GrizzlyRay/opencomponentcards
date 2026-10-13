@@ -20,7 +20,7 @@ parameters:
     nominal: 1.8
     model_binding:
       param: VTO
-      transform: "offset: VTO_new = VTO_file + (vth_sample - 1.8)"
+      transform: { type: offset, reference: 1.8, param_unit: V }   # VTO_new = VTO_file + (vth_sample - 1.8)
       note: "Datasheet Vth (Id = 250 uA, Vds = Vgs) is not the same quantity as VTO in a vendor subcircuit. Apply the sample as a shift, never as VTO itself."
     distribution:
       type: normal
@@ -49,7 +49,7 @@ parameters:
     nominal: 0.005
     model_binding:
       param: RD
-      transform: "offset: RD_new = RD_file + (rds_on_sample - 0.005)"
+      transform: { type: offset, reference: 0.005, param_unit: Ohm }   # RD_new = RD_file + (rds_on_sample - 0.005)
       note: "Rds(on) is split across RD, RS, and channel KP in most subcircuits. A drain-resistor shift is only valid at the stated Vgs and Id."
     distribution:
       type: lognormal

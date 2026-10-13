@@ -104,3 +104,4 @@ CycloneDX and SPDX 3.0, IBIS and the IBIS Quality Specification, CMC compact mod
 
 - Added an optional `limits` field for published datasheet limits (#1, suggested by Drew Owens).
 - Added a standard vocabulary for `conditions` keys, with units in the key name. Non-standard keys still pass but get a warning with the closest match (#3, suggested by Drew Owens). See [docs/conditions.md](docs/conditions.md).
+- Made `model_binding.transform` machine-readable, with `offset`, `scale`, `replace`, and `affine` types plus an optional `note`. Plain string transforms still pass but get a warning (#6, suggested by Drew Owens). See [docs/model-binding.md](docs/model-binding.md).
