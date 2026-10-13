@@ -1,0 +1,51 @@
+name: Sign cards
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cards/**/*.yaml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Pick cards to sign
+        id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            find cards -name '*.yaml' | sort > /tmp/cards.txt
+          else
+            git diff --name-only --diff-filter=AM "${{ github.event.before }}" "${{ github.sha }}" -- 'cards/**/*.yaml' > /tmp/cards.txt
+          fi
+          cat /tmp/cards.txt
+
+      - name: Sign with Sigstore (keyless)
+        run: |
+          while read -r card; do
+            [ -n "$card" ] || continue
+            cosign sign-blob --yes --bundle "${card}.sigstore.json" "$card"
+          done < /tmp/cards.txt
+
+      - name: Commit bundles
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cards
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+          else
+            git commit -m "Sign cards with Sigstore [skip ci]"
+            git push
+          fi

@@ -39,6 +39,23 @@ python3 tools/validate.py --schema schema/card.schema.json cards/examples/*.yaml
 
 The validator checks the schema plus rules a schema cannot express: distribution parameters per type, `applies_to` semantics, correlation matrices (symmetric and positive semidefinite), SPDX license ids, units, quoted ISO dates, references, and nominal-vs-mean consistency.
 
+## Verifying a Card
+
+Every card in `cards/` is signed by this repo's GitHub Actions workflow using Sigstore keyless signing. The signature bundle sits next to the card as `<card>.sigstore.json`. Nobody holds a private key; the signer is the workflow's GitHub identity.
+
+Install [cosign](https://docs.sigstore.dev/cosign/system_config/installation/), then run:
+
+```sh
+cosign verify-blob cards/examples/example_resistor.yaml \
+  --bundle cards/examples/example_resistor.yaml.sigstore.json \
+  --certificate-identity "https://github.com/GrizzlyRay/opencomponentcards/.github/workflows/sign.yml@refs/heads/main" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+```
+
+Or use the helper: `tools/verify.sh cards/examples/example_resistor.yaml`
+
+`Verified OK` means this exact card was published by the GrizzlyRay/opencomponentcards workflow and hasn't changed since. It doesn't mean the numbers are right. That's what the card's sources and maturity level are for.
+
 ## Feedback wanted
 
 Open an issue, especially on:
