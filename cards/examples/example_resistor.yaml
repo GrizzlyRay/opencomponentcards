@@ -21,6 +21,7 @@ parameters:
       basis: "Placeholder for unknown shape: datasheet +/-1% limit treated as 3 sigma. Real lots are often much tighter, may be off-centre, and binned parts can show gaps."
       confidence: low
     conditions: { temperature_c: 25 }
+    limits: { min: 9900, typ: 10000, max: 10100, source_ref: ds1 }  # EXAMPLE: published +/-1%
     source_refs: [ds1]
   - name: tcr                # how much resistance shifts per kelvin
     unit: ppm/K
@@ -33,6 +34,7 @@ parameters:
       basis: "Datasheet TCR limit, no shape info. TCR is defined over a stated span (here 25 to 125 C); thick-film TCR is not linear across the full range."
       confidence: low
     conditions: { reference_span_c: [25, 125] }
+    limits: { min: -100, max: 100, source_ref: ds1 }  # EXAMPLE: published TCR limit
     source_refs: [ds1]
 derivation:
   kind: physics

@@ -38,7 +38,17 @@ pip install -r requirements.txt
 python3 tools/validate.py --schema schema/card.schema.json cards/examples/*.yaml cards/real/*.yaml
 ```
 
-The validator checks the schema plus rules a schema cannot express: distribution parameters per type, `applies_to` semantics, correlation matrices (symmetric and positive semidefinite), SPDX license ids, units, quoted ISO dates, references, and nominal-vs-mean consistency.
+The validator checks the schema plus rules a schema cannot express: distribution parameters per type, `applies_to` semantics, correlation matrices (symmetric and positive semidefinite), SPDX license ids, units, quoted ISO dates, references, nominal-vs-mean consistency, and published limits.
+
+## Published Limits
+
+Each parameter can carry an optional `limits` block with the published datasheet numbers, kept apart from the modeling choice in `distribution`:
+
+```yaml
+limits: { min: 9900, typ: 10000, max: 10100, source_ref: ds1 }
+```
+
+`min`, `typ`, and `max` are each optional numbers in the parameter's unit, but at least one is needed. You can add `conditions` if the limit's published at different conditions than the parameter. This way two people can model the same datasheet fact differently and still point at the same limit. The validator errors if `min <= typ <= max` doesn't hold, and warns if a value distribution's support or truncation goes past the limits. It's optional, so v0.1 cards without it stay valid. Suggested by Drew Owens ([#1](https://github.com/GrizzlyRay/opencomponentcards/issues/1)).
 
 ## Real-Data Cards
 

@@ -140,6 +140,19 @@
             }
           }
         },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Published limits for this parameter, e.g. from a datasheet, kept apart from the modeling choice in distribution. Same unit as the parameter. Optional.",
+          "anyOf": [ { "required": ["min"] }, { "required": ["typ"] }, { "required": ["max"] } ],
+          "properties": {
+            "min": { "type": "number" },
+            "typ": { "type": "number" },
+            "max": { "type": "number" },
+            "conditions": { "type": "object", "description": "Conditions the limit is published at, if different from the parameter's conditions" },
+            "source_ref": { "type": "string", "description": "ref of the source that publishes this limit" }
+          }
+        },
         "final_limits": {
           "type": "object",
           "additionalProperties": false,

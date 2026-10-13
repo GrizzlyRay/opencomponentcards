@@ -31,6 +31,7 @@ parameters:
       basis: "Datasheet min/max treated as 3 sigma"
       confidence: low
     conditions: { temperature_c: 25, id_a: 250.0e-6, vds_eq_vgs: true }
+    limits: { min: 1.2, typ: 1.8, max: 2.4, source_ref: ds1 }  # EXAMPLE: published Vth min/typ/max
     source_refs: [ds1]
   - name: vth_tempco
     unit: V/K
@@ -59,6 +60,7 @@ parameters:
       basis: "Typ as median, datasheet max treated as about 3 sigma"
       confidence: low
     conditions: { temperature_c: 25, vgs_v: 10, id_a: 20 }
+    limits: { typ: 0.005, max: 0.0065, source_ref: ds1 }  # EXAMPLE: published Rds(on) typ/max
     dependence:
       - variable: temperature_c
         interpolation: linear
