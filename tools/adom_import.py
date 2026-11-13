@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Map Adom wiki characteristic rows into OpenComponentCards values (Apache-2.0).
+"""Map an Adom wiki page.json into an OpenComponentCards v0.2 card (Apache-2.0).
 
-Pure functions only. No network and no command-line interface.
+No network and no command-line interface. Datasheet files are not downloaded.
 Printed units become the closed OCC unit list, with a scale into that unit.
 """
 import re
+
+import yaml
 
 # Skip kinds are never imported, even when a caller lists them.
 IMPORT_KINDS = frozenset({
@@ -191,3 +193,233 @@ def parse_conditions(text):
             continue
         found.setdefault(key, value)
     return found
+
+
+class InputError(ValueError):
+    """The page or options are not enough to build a card."""
+
+
+class Options:
+    """Inputs for one import.
+
+    date is YYYY-MM-DD. category and manufacturer, when set, replace the page
+    values. category is an OCC category, not an Adom label. warnings collects
+    messages such as an unmapped category.
+    """
+
+    def __init__(self, date, category=None, manufacturer=None, kinds=None):
+        self.date = date
+        self.category = category
+        self.manufacturer = manufacturer
+        self.kinds = IMPORT_KINDS if kinds is None else kinds
+        self.warnings = []
+
+
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ID_PART = re.compile(r"[A-Za-z0-9._-]+")
+_CATEGORY = {
+    "resistor": "resistor",
+    "resistors": "resistor",
+    "capacitor": "capacitor",
+    "capacitors": "capacitor",
+    "inductor": "inductor",
+    "inductors": "inductor",
+    "diode": "diode",
+    "diodes": "diode",
+}
+_COND_ORDER = ("temperature_c", "frequency_hz", "vgs_v", "vds_v", "vds_eq_vgs", "id_a")
+_EPISTEMIC = frozenset({"temperature_coefficient", "voltage_coefficient"})
+
+
+def _slug(text):
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    if not slug:
+        raise InputError(f"manufacturer {text!r} has no characters usable in a card id")
+    return slug
+
+
+def _manufacturer(page, opts):
+    override = opts.manufacturer
+    if isinstance(override, str) and override.strip():
+        return override.strip()
+    raw = (page.get("component") or {}).get("manufacturer")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    raise InputError("component.manufacturer is empty and opts.manufacturer is not set")
+
+
+def _category(raw, opts):
+    if isinstance(opts.category, str) and opts.category.strip():
+        return opts.category.strip(), None
+    label = raw.strip() if isinstance(raw, str) else ""
+    mapped = _CATEGORY.get(label.lower())
+    if mapped:
+        return mapped, None
+    shown = label or "(missing)"
+    return "other", f"Category {shown!r} is not an OCC category; imported as other."
+
+
+def _license(page):
+    if "license" not in page or not isinstance(page.get("license"), str) or not page["license"].strip():
+        raise InputError("page has no license")
+    return page["license"].strip()
+
+
+def _mpn_token(mpn):
+    token = mpn.lower()
+    if _ID_PART.fullmatch(token):
+        return token
+    token = re.sub(r"[^a-z0-9._-]+", "-", token).strip("-")
+    if not token:
+        raise InputError(f"mpn {mpn!r} has no characters usable in a card id")
+    return token
+
+
+def _page_evidence(usable):
+    pages = []
+    for item in usable:
+        number = item["row"].get("source_page")
+        if isinstance(number, bool) or not isinstance(number, (int, float)):
+            continue
+        if isinstance(number, float) and not number.is_integer():
+            continue
+        pages.append(int(number))
+    pages = sorted(set(pages))
+    if not pages:
+        return "datasheet"
+    return ", ".join(f"p.{number}" for number in pages)
+
+
+def _basis(row):
+    conditions = row.get("conditions") or ""
+    page_no = row.get("source_page")
+    page_bit = page_no if page_no is not None else "?"
+    return (
+        f"Adom row '{row.get('name', '')}' ({row.get('symbol', '')}, {row.get('kind', '')}), "
+        f"conditions '{conditions}', datasheet p.{page_bit}. "
+        "Shape not published; uniform over the published limits."
+    )
+
+
+def _nominal(row, low, high):
+    # A percent is a spread around the part's value, so the card nominal is 0
+    # in the dimensionless unit. Other rows use the midpoint of the limits.
+    if row.get("unit") == "%":
+        return 0
+    return (low + high) / 2
+
+
+def _conditions(text):
+    found = parse_conditions(text)
+    return {key: found[key] for key in _COND_ORDER if key in found}
+
+
+def _parameter(name, item):
+    row = item["row"]
+    low, high = item["min"], item["max"]
+    dist_kind = "epistemic" if row.get("kind") in _EPISTEMIC else "population"
+    parameter = {
+        "name": name,
+        "unit": item["unit"],
+        "nominal": _nominal(row, low, high),
+        "distributions": [{
+            "scope": "total",
+            "type": "uniform",
+            "applies_to": "value",
+            "kind": dist_kind,
+            "params": {"min": low, "max": high},
+            "basis": _basis(row),
+            "confidence": "low",
+        }],
+    }
+    conditions = _conditions(row.get("conditions"))
+    if conditions:
+        parameter["conditions"] = conditions
+    parameter["limits"] = {"min": low, "max": high, "source_ref": "wiki1"}
+    parameter["source_refs"] = ["wiki1"]
+    return parameter
+
+
+def build_card(page, opts):
+    """Build an OCC v0.2 card dict from one Adom page.json object."""
+    if not isinstance(page, dict):
+        raise InputError("page must be a JSON object")
+    if not isinstance(getattr(opts, "date", None), str) or not _DATE.fullmatch(opts.date):
+        raise InputError("opts.date must be YYYY-MM-DD")
+    component = page.get("component") if isinstance(page.get("component"), dict) else {}
+    manufacturer = _manufacturer(page, opts)
+    license_id = _license(page)
+    mpn = component.get("mpn")
+    if not isinstance(mpn, str) or not mpn.strip():
+        raise InputError("component.mpn is empty")
+    category, warning = _category(component.get("category"), opts)
+    if warning:
+        opts.warnings.append(warning)
+    rows = ((page.get("metadata") or {}).get("characteristics") or {}).get("rows") or []
+    if not isinstance(rows, list):
+        rows = []
+    usable, _skipped = select_rows(rows, opts.kinds)
+    if not usable:
+        raise InputError("no importable characteristic rows")
+    names = assign_names([item["row"] for item in usable])
+    owner = page.get("owner") if isinstance(page.get("owner"), str) else ""
+    slug = page.get("slug") if isinstance(page.get("slug"), str) else ""
+    version = page.get("version") if isinstance(page.get("version"), str) else ""
+    updated = page.get("updated_at") if isinstance(page.get("updated_at"), str) else ""
+    notes = f"Adom page version {version}, updated_at {updated}."
+    if warning:
+        notes = f"{notes} {warning}"
+    part = {"manufacturer": manufacturer, "mpn": mpn.strip(), "category": category}
+    title = page.get("title")
+    if isinstance(title, str) and title:
+        part["description"] = title
+    package = component.get("package")
+    if isinstance(package, str) and package:
+        part["package"] = package
+    ds1 = {"ref": "ds1", "kind": "datasheet"}
+    datasheet = component.get("datasheet")
+    if isinstance(datasheet, str) and datasheet:
+        ds1["uri"] = datasheet
+    ds1["evidence"] = _page_evidence(usable)
+    ds1["confidence"] = "high"
+    # The wiki URI is recorded as the derived source. The page is not fetched.
+    wiki1 = {
+        "ref": "wiki1",
+        "kind": "derived",
+        "derived_from": ["ds1"],
+        "uri": f"https://wiki.adom.inc/{owner}/{slug}",
+        "evidence": "metadata.characteristics.rows",
+        "confidence": "high",
+    }
+    return {
+        "card_version": "0.2",
+        "id": f"occ:{category}/{_slug(manufacturer)}-{_mpn_token(mpn)}@0.1.0",
+        "part": part,
+        "model_files": [],
+        "parameters": [_parameter(name, item) for name, item in zip(names, usable)],
+        "derivation": {
+            "kind": "data",
+            "method": "Uniform distribution over each published min and max. The datasheet does not state the shape.",
+        },
+        "validation": {"maturity": "0.1", "tested_simulators": [], "comparisons": []},
+        "sources": [ds1, wiki1],
+        "provenance": {
+            "author": (
+                "Jacob Warren and GrizzlyRay LLC, imported from the Adom wiki page "
+                f"{owner}/{slug} (Adom, wiki.adom.inc)"
+            ),
+            "created": opts.date,
+            "previous_version": None,
+            "signatures": [],
+        },
+        "license": license_id,
+        "notes": notes,
+    }
+
+
+def dump_card(card):
+    """YAML for a card. Dict insertion order is kept, so one card always dumps the same bytes."""
+    text = yaml.safe_dump(card, sort_keys=False, allow_unicode=True, default_flow_style=False, width=4096)
+    if not text.endswith("\n"):
+        text += "\n"
+    return text

@@ -3,15 +3,19 @@
 
 Run: python3 tests/test_adom_import.py
 """
+import contextlib
+import io
 import json
 import math
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import adom_import as ai  # noqa: E402
+import validate as vd  # noqa: E402
 
 FIX = ROOT / "tests" / "fixtures" / "adom"
 NAME = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -217,6 +221,131 @@ check("T = 25°C is temperature_c", same_cond(ai.parse_conditions("T = 25\u00b0C
 check("T = 25℃ is temperature_c", same_cond(ai.parse_conditions("T = 25\u2103"), {"temperature_c": 25}))
 check("a temperature range is not guessed", ai.parse_conditions("T = -40\u00b0C to 85\u00b0C") == {})
 check("conflicting values for one key are dropped", same_cond(ai.parse_conditions("VGS = 4.5V, VGS = 10V, ID = 1A"), {"id_a": 1}))
+
+
+def load_page(filename):
+    return json.loads((FIX / filename).read_text(encoding="utf-8"))
+
+
+def raises_input(filename):
+    try:
+        ai.build_card(load_page(filename), ai.Options(date="2026-11-13"))
+    except ai.InputError:
+        return True
+    except Exception:
+        return False
+    return False
+
+
+def validation_report(yaml_text):
+    """Run tools/validate.py on the dumped card. Rules stay in that module."""
+    path = None
+    try:
+        handle = tempfile.NamedTemporaryFile("w", suffix=".yaml", encoding="utf-8", delete=False)
+        path = Path(handle.name)
+        handle.write(yaml_text)
+        handle.close()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = vd.main(["--schema", str(ROOT / "schema" / "card.schema.json"), str(path)])
+        return code, buf.getvalue()
+    finally:
+        if path is not None:
+            path.unlink(missing_ok=True)
+
+
+DATE = "2026-11-13"
+mosfet_page = load_page("synthetic-mosfet.json")
+passive_page = load_page("synthetic-passive.json")
+mosfet_opts = ai.Options(date=DATE)
+passive_opts = ai.Options(date=DATE)
+mosfet_card = ai.build_card(mosfet_page, mosfet_opts)
+passive_card = ai.build_card(passive_page, passive_opts)
+mosfet_yaml = ai.dump_card(mosfet_card)
+passive_yaml = ai.dump_card(passive_card)
+
+for label, text in (("mosfet", mosfet_yaml), ("passive", passive_yaml)):
+    code, report = validation_report(text)
+    if code != 0:
+        print(report)
+    check(f"{label} card passes validation with no errors", code == 0 and "ERROR" not in report)
+    check(f"{label} yaml has no source sha256", "sha256" not in text)
+
+check("mosfet license is the fixture license", mosfet_card["license"] == mosfet_page["license"] == "CC-BY-SA-4.0")
+check("passive license is the fixture license", passive_card["license"] == passive_page["license"] == "CC-BY-SA-4.0")
+check("maturity is 0.1", mosfet_card["validation"]["maturity"] == "0.1" and passive_card["validation"]["maturity"] == "0.1")
+check("no source dict has sha256", all("sha256" not in source for source in mosfet_card["sources"] + passive_card["sources"]))
+check("derivation kind is data", mosfet_card["derivation"]["kind"] == "data" and passive_card["derivation"]["kind"] == "data")
+check("created is opts.date", mosfet_card["provenance"]["created"] == DATE and passive_card["provenance"]["created"] == DATE)
+
+check("transistor category maps to other", mosfet_card["part"]["category"] == "other")
+check("unmapped category is warned", mosfet_opts.warnings == ["Category 'Transistor' is not an OCC category; imported as other."])
+check("warning is on the card notes", "Category 'Transistor' is not an OCC category; imported as other." in mosfet_card["notes"])
+check("notes record the page version and updated_at", mosfet_page["version"] in mosfet_card["notes"] and mosfet_page["updated_at"] in mosfet_card["notes"])
+check("mosfet id matches the schema shape", mosfet_card["id"] == "occ:other/example-semi-syn-mos-30v@0.1.0")
+check("passive category is resistor", passive_card["part"]["category"] == "resistor")
+check("passive id matches the schema shape", passive_card["id"] == "occ:resistor/example-passive-syn-r-10k@0.1.0")
+check("description comes from the title", mosfet_card["part"]["description"] == mosfet_page["title"])
+check("package and mpn come from the component", mosfet_card["part"]["mpn"] == "SYN-MOS-30V" and mosfet_card["part"]["package"] == "DFN 3x3")
+check(
+    "provenance names the wiki page",
+    mosfet_card["provenance"]["author"] == (
+        "Jacob Warren and GrizzlyRay LLC, imported from the Adom wiki page "
+        "synthetic-example/synthetic-mosfet (Adom, wiki.adom.inc)"
+    ),
+)
+check("mosfet imports only VGS(th)", [item["name"] for item in mosfet_card["parameters"]] == ["vgs_th"])
+vth_param = mosfet_card["parameters"][0]
+vth_row = next(row for row in mosfet_page["metadata"]["characteristics"]["rows"] if row["symbol"] == "VGS(th)")
+check("VGS(th) limits are the published min and max in volts", near(vth_param["limits"]["min"], 1) and near(vth_param["limits"]["max"], 2.5))
+check("VGS(th) nominal is the midpoint", near(vth_param["nominal"], 1.75))
+check("limits cite wiki1", vth_param["limits"]["source_ref"] == "wiki1" and vth_param["source_refs"] == ["wiki1"])
+vth_dist = vth_param["distributions"][0]
+check("VGS(th) is a uniform population over the limits", vth_dist["scope"] == "total" and vth_dist["type"] == "uniform" and vth_dist["applies_to"] == "value" and vth_dist["kind"] == "population" and vth_dist["confidence"] == "low")
+check("VGS(th) distribution matches the limits", near(vth_dist["params"]["min"], vth_param["limits"]["min"]) and near(vth_dist["params"]["max"], vth_param["limits"]["max"]))
+check(
+    "VGS(th) basis quotes the row",
+    vth_dist["basis"] == (
+        f"Adom row '{vth_row['name']}' ({vth_row['symbol']}, {vth_row['kind']}), "
+        f"conditions '{vth_row['conditions']}', datasheet p.{vth_row['source_page']}. "
+        "Shape not published; uniform over the published limits."
+    ),
+)
+check("VGS(th) conditions are the parsed standard keys", vth_param["conditions"].get("vds_eq_vgs") is True and near(vth_param["conditions"].get("id_a"), 250e-6) and "vds_v" not in vth_param["conditions"])
+
+check("passive parameter names", [item["name"] for item in passive_card["parameters"]] == ["tol", "tcr"])
+tol = passive_card["parameters"][0]
+tcr = passive_card["parameters"][1]
+check("percent row is dimensionless with nominal 0", tol["unit"] == "1" and tol["nominal"] == 0)
+check("percent limits are scaled", near(tol["limits"]["min"], -0.01) and near(tol["limits"]["max"], 0.01))
+check("percent distribution is population over the scaled limits", tol["distributions"][0]["kind"] == "population" and near(tol["distributions"][0]["params"]["min"], -0.01) and near(tol["distributions"][0]["params"]["max"], 0.01))
+check("ppm row is ppm/K", tcr["unit"] == "ppm/K" and tcr["limits"]["min"] == -100 and tcr["limits"]["max"] == 100)
+check("ppm nominal is the midpoint", tcr["nominal"] == 0)
+check("ppm distribution is epistemic", tcr["distributions"][0]["kind"] == "epistemic" and tcr["distributions"][0]["type"] == "uniform")
+check("sources are ds1 then wiki1", [item["ref"] for item in passive_card["sources"]] == ["ds1", "wiki1"])
+check("datasheet uri is copied and not hashed", passive_card["sources"][0]["kind"] == "datasheet" and passive_card["sources"][0]["uri"] == passive_page["component"]["datasheet"] and passive_card["sources"][0]["evidence"] == "p.1")
+check(
+    "wiki source is derived from ds1",
+    passive_card["sources"][1]["kind"] == "derived"
+    and passive_card["sources"][1]["derived_from"] == ["ds1"]
+    and passive_card["sources"][1]["uri"] == "https://wiki.adom.inc/synthetic-example/synthetic-passive"
+    and passive_card["sources"][1]["evidence"] == "metadata.characteristics.rows"
+    and passive_card["sources"][1]["confidence"] == "high",
+)
+
+check("missing manufacturer is an input error", raises_input("synthetic-no-manufacturer.json"))
+check("missing license is an input error", raises_input("synthetic-no-license.json"))
+
+override = ai.Options(date=DATE, category="mosfet", manufacturer="Override Co")
+overridden = ai.build_card(mosfet_page, override)
+check("category and manufacturer overrides win", overridden["part"]["category"] == "mosfet" and overridden["part"]["manufacturer"] == "Override Co")
+check("override id uses the occ category and manufacturer slug", overridden["id"] == "occ:mosfet/override-co-syn-mos-30v@0.1.0")
+check("an explicit category does not warn", override.warnings == [])
+
+again = ai.dump_card(ai.build_card(passive_page, ai.Options(date=DATE))).encode("utf-8")
+check("two passive runs give identical bytes", passive_yaml.encode("utf-8") == again)
+mosfet_again = ai.dump_card(ai.build_card(mosfet_page, ai.Options(date=DATE))).encode("utf-8")
+check("two mosfet runs give identical bytes", mosfet_yaml.encode("utf-8") == mosfet_again)
 
 print(f"\n{'all tests passed' if not failures else f'{failures} test(s) failed'}")
 sys.exit(1 if failures else 0)
