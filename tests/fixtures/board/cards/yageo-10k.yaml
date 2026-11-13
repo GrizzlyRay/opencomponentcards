@@ -1,0 +1,8 @@
+# Synthetic local card. The mpn spelling differs from the BOM by spaces and case.
+card_version: "0.2"
+id: occ:resistor/yageo-rc0603fr0710kl@0.1.0
+part:
+  manufacturer: yageo
+  mpn: "rc0603fr 0710kl"
+  category: resistor
+parameters: []

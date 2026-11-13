@@ -1,0 +1,3 @@
+refdes,mpn,manufacturer,value,tolerance,adom_slug
+R1,AAA,Acme,10k,1%,
+r1,BBB,Acme,10k,1%,
