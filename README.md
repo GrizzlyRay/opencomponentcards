@@ -31,6 +31,7 @@ cards/real/*.yaml           Real-data cards built from datasheets by Drew Owens 
 cards/real/families/*.yaml  Family cards: shared series data plus value-dependent rules
 tools/validate.py           Validator: schema plus extra consistency checks
 tools/resolve.py            Merges a family card and a part card into one resolved card
+tools/adom_import.py        Drafts an OCC card from an Adom wiki page.json
 tests/                      Verifier tests
 tools/verify.sh             Verifies card signatures against the trusted-signer policy
 trust/signers.yaml          Public allow-list of trusted signers
@@ -40,6 +41,7 @@ docs/lot-device-spread.md   Lot vs device spread in the distributions list
 docs/family-cards.md        Family cards and value-dependent rules
 docs/signer-trust.md        Signer trust levels and how to become a signer
 docs/migration-v0.1-to-v0.2.md  What changed since v0.1 and how to convert cards
+docs/adom-import.md         How the Adom importer maps a wiki page to a card
 ```
 
 ## Quick start
@@ -112,6 +114,10 @@ CycloneDX and SPDX 3.0, IBIS and the IBIS Quality Specification, CMC compact mod
 - Card data (`cards/`): [CC-BY-4.0](LICENSE-DATA)
 
 ## Changelog
+
+**Unreleased.** Not a version bump. `card_version` stays `"0.2"`.
+
+- Added `tools/adom_import.py`. It drafts an OCC card from an Adom wiki `page.json`: uniform over the published limits, maturity `"0.1"`, license copied from the page, and no datasheet hash. Drafts go to `out/` and are not committed. The mapping is from Drew Owens at Adom ([community notes](https://wiki.adom.inc/drew2/community-open-component-cards)). See [docs/adom-import.md](docs/adom-import.md).
 
 **v0.2 (2026-10-13).** Cards now use `card_version: "0.2"`. There are two breaking changes, the `distributions` list and the signature file layout; see [docs/migration-v0.1-to-v0.2.md](docs/migration-v0.1-to-v0.2.md). Thanks to Drew Owens, an engineer at Adom, whose notes shaped this release.
 
