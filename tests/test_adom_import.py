@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Tests for the pure functions in tools/adom_import.py. No pytest and no network.
+"""Tests for tools/adom_import.py. No pytest and no network.
+
+CLI checks use --from-file and synthetic fixtures. A dead local proxy is set
+so a bug that ignores --from-file cannot reach wiki.adom.inc.
 
 Run: python3 tests/test_adom_import.py
 """
@@ -7,9 +10,14 @@ import contextlib
 import io
 import json
 import math
+import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -346,6 +354,197 @@ again = ai.dump_card(ai.build_card(passive_page, ai.Options(date=DATE))).encode(
 check("two passive runs give identical bytes", passive_yaml.encode("utf-8") == again)
 mosfet_again = ai.dump_card(ai.build_card(mosfet_page, ai.Options(date=DATE))).encode("utf-8")
 check("two mosfet runs give identical bytes", mosfet_yaml.encode("utf-8") == mosfet_again)
+
+check("bare slug", ai.parse_slug("synthetic-mosfet") == "synthetic-mosfet")
+check("owner/slug uses the slug", ai.parse_slug("synthetic-example/synthetic-mosfet") == "synthetic-mosfet")
+check(
+    "wiki page URL uses the slug",
+    ai.parse_slug("https://wiki.adom.inc/synthetic-example/synthetic-mosfet") == "synthetic-mosfet",
+)
+check(
+    "blob page URL uses the slug",
+    ai.parse_slug("https://wiki.adom.inc/blob/component/synthetic-mosfet/page.json") == "synthetic-mosfet",
+)
+check("blob path uses the slug", ai.parse_slug("/blob/component/synthetic-mosfet/page.json") == "synthetic-mosfet")
+check(
+    "default out path is out/adom/<slug>.yaml",
+    ai.output_path("synthetic-mosfet", None) == (ROOT / "out" / "adom" / "synthetic-mosfet.yaml").resolve(),
+)
+saved_cwd = Path.cwd()
+try:
+    os.chdir(ROOT)
+    try:
+        ai.output_path("synthetic-mosfet", "out/../cards/x.yaml")
+        traversal_refused = False
+    except ai.InputError as exc:
+        traversal_refused = "outside out/" in str(exc)
+finally:
+    os.chdir(saved_cwd)
+check("a path that climbs out of out/ is refused", traversal_refused)
+check(
+    "a 404 JSON hint is the hint string",
+    ai._json_hint(b'{"hint": "no component with that slug"}') == "no component with that slug",
+)
+
+
+def cli(args):
+    """Run the importer. Proxies point at a closed port so this cannot fetch the wiki."""
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["http_proxy"] = env["HTTP_PROXY"] = "http://127.0.0.1:9"
+    env["https_proxy"] = env["HTTPS_PROXY"] = "http://127.0.0.1:9"
+    env.pop("NO_PROXY", None)
+    env.pop("no_proxy", None)
+    return subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "adom_import.py"), *args],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def check_proc(name, cond, proc):
+    if not cond:
+        print("--- stdout ---")
+        print(proc.stdout)
+        print("--- stderr ---")
+        print(proc.stderr)
+    check(name, cond)
+
+
+(ROOT / "out").mkdir(exist_ok=True)
+cli_tmp = Path(tempfile.mkdtemp(dir=ROOT / "out", prefix="adom-cli-"))
+stray = ROOT / "cards" / "x.yaml"
+stray_existed = stray.exists()
+mosfet_file = FIX / "synthetic-mosfet.json"
+try:
+    written = cli_tmp / "mosfet.yaml"
+    proc = cli([
+        "synthetic-mosfet",
+        "--from-file", str(mosfet_file),
+        "--out", str(written),
+        "--date", DATE,
+        "--report",
+    ])
+    theta = next(row["symbol"] for row in mosfet_page["metadata"]["characteristics"]["rows"] if row["kind"] == "thermal")
+    report = [
+        "skipped RDS(on): one-sided limits",
+        "skipped RDS(on): one-sided limits",
+        "skipped IDSS: one-sided limits",
+        "skipped IDSS: one-sided limits",
+        "skipped IGSS: one-sided limits",
+        "skipped RG: one-sided limits",
+        "skipped gFS: unknown unit",
+        f"skipped {theta}: skipped kind",
+        "skipped Coss: one-sided limits",
+        "skipped VDSS: skipped kind",
+        "skipped VGS: skipped kind",
+        "skipped VSW: min not less than max",
+        "vgs_th",
+        "PASS",
+    ]
+    check_proc("mosfet fixture exits 0 and the report lists every skip reason", proc.returncode == 0 and proc.stdout.splitlines() == report, proc)
+    card_text = written.read_text(encoding="utf-8") if written.is_file() else ""
+    check("mosfet card is written under out/ and keeps the fixture license", written.is_file() and "CC-BY-SA-4.0" in card_text and "SYN-MOS-30V" in card_text)
+    check("category warning stays off the report", "Category" not in proc.stdout and "imported as other" in proc.stderr)
+
+    for filename, needle in (
+        ("synthetic-no-rows.json", "no rows"),
+        ("synthetic-no-manufacturer.json", "manufacturer"),
+        ("synthetic-no-license.json", "license"),
+    ):
+        dest = cli_tmp / f"{filename}.yaml"
+        proc = cli(["synthetic-mosfet", "--from-file", str(FIX / filename), "--out", str(dest), "--date", DATE])
+        check_proc(f"{filename} exits 2 ({needle}) and writes nothing", proc.returncode == 2 and needle in proc.stderr and not dest.exists(), proc)
+
+    proc = cli(["synthetic-mosfet", "--from-file", str(mosfet_file), "--out", "cards/x.yaml", "--date", DATE])
+    check_proc("cards/x.yaml is refused", proc.returncode == 2 and "outside out/" in proc.stderr and not stray.exists(), proc)
+
+    proc = cli(["synthetic-mosfet", "--from-file", str(mosfet_file), "--out", "out/../cards/x.yaml", "--date", DATE])
+    check_proc("out/../cards/x.yaml is refused", proc.returncode == 2 and "outside out/" in proc.stderr and not stray.exists(), proc)
+
+    narrowed = cli_tmp / "thermal.yaml"
+    proc = cli(["synthetic-mosfet", "--from-file", str(mosfet_file), "--out", str(narrowed), "--kinds", "thermal", "--date", DATE])
+    check_proc("asking for a skipped kind is an error", proc.returncode == 2 and "never imported" in proc.stderr and not narrowed.exists(), proc)
+
+    timing = cli_tmp / "timing.yaml"
+    proc = cli(["synthetic-mosfet", "--from-file", str(mosfet_file), "--out", str(timing), "--kinds", "timing", "--date", DATE, "--report"])
+    check_proc("narrowing away every usable row exits 2", proc.returncode == 2 and "no usable rows" in proc.stderr and not timing.exists(), proc)
+
+    electrical = cli_tmp / "electrical.yaml"
+    proc = cli([
+        "https://wiki.adom.inc/synthetic-example/synthetic-mosfet",
+        "--from-file", str(mosfet_file),
+        "--out", str(electrical),
+        "--kinds", "electrical",
+        "--date", DATE,
+        "--report",
+    ])
+    check_proc("keeping electrical still imports vgs_th", proc.returncode == 0 and "vgs_th" in proc.stdout.splitlines() and proc.stdout.splitlines()[-1] == "PASS", proc)
+finally:
+    shutil.rmtree(cli_tmp, ignore_errors=True)
+    if not stray_existed and stray.exists():
+        stray.unlink()
+
+seen = {}
+
+
+def fake_open(req, timeout=0):
+    seen["url"] = req.full_url
+    seen["timeout"] = timeout
+    seen["ua"] = req.get_header("User-agent")
+    body = b'{"hint": "no component with that slug"}'
+    raise urllib.error.HTTPError(req.full_url, 404, "Not Found", None, io.BytesIO(body))
+
+
+original_open = urllib.request.urlopen
+urllib.request.urlopen = fake_open
+hint_err = io.StringIO()
+try:
+    with contextlib.redirect_stderr(hint_err):
+        hint_code = ai.main([
+            "https://example.invalid/blob/component/synthetic-mosfet/page.json",
+            "--out", str(ROOT / "out" / "adom-cli-hint.yaml"),
+            "--date", DATE,
+        ])
+finally:
+    urllib.request.urlopen = original_open
+hint_file = ROOT / "out" / "adom-cli-hint.yaml"
+check(
+    "a 404 prints the wiki hint and fetches the canonical blob URL",
+    hint_code == 2
+    and "no component with that slug" in hint_err.getvalue()
+    and seen.get("url") == "https://wiki.adom.inc/blob/component/synthetic-mosfet/page.json"
+    and seen.get("timeout") == 20
+    and isinstance(seen.get("ua"), str)
+    and "opencomponentcards" in seen["ua"]
+    and not hint_file.exists(),
+)
+if hint_file.exists():
+    hint_file.unlink()
+
+called = {"n": 0}
+
+
+def counting_open(req, timeout=0):
+    called["n"] += 1
+    raise AssertionError("fetched")
+
+
+urllib.request.urlopen = counting_open
+refuse_err = io.StringIO()
+try:
+    with contextlib.redirect_stderr(refuse_err):
+        refuse_code = ai.main(["synthetic-mosfet", "--out", str(stray), "--date", DATE])
+finally:
+    urllib.request.urlopen = original_open
+if not stray_existed and stray.exists():
+    stray.unlink()
+check(
+    "a path outside out/ is refused before any fetch",
+    refuse_code == 2 and called["n"] == 0 and "outside out/" in refuse_err.getvalue() and not stray.exists(),
+)
 
 print(f"\n{'all tests passed' if not failures else f'{failures} test(s) failed'}")
 sys.exit(1 if failures else 0)

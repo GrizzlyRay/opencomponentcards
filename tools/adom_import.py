@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
 """Map an Adom wiki page.json into an OpenComponentCards v0.2 card (Apache-2.0).
 
-No network and no command-line interface. Datasheet files are not downloaded.
+Datasheet files are not downloaded. A page.json is read with --from-file or
+fetched from the wiki blob URL. Draft cards are written only under out/.
 Printed units become the closed OCC unit list, with a scale into that unit.
 """
+import argparse
+import json
 import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import date
+from pathlib import Path
 
+import validate as vd
 import yaml
 
 # Skip kinds are never imported, even when a caller lists them.
@@ -355,12 +365,12 @@ def build_card(page, opts):
     category, warning = _category(component.get("category"), opts)
     if warning:
         opts.warnings.append(warning)
-    rows = ((page.get("metadata") or {}).get("characteristics") or {}).get("rows") or []
-    if not isinstance(rows, list):
-        rows = []
+    rows = characteristic_rows(page)
+    if not rows:
+        raise InputError("no rows")
     usable, _skipped = select_rows(rows, opts.kinds)
     if not usable:
-        raise InputError("no importable characteristic rows")
+        raise InputError("no usable rows")
     names = assign_names([item["row"] for item in usable])
     owner = page.get("owner") if isinstance(page.get("owner"), str) else ""
     slug = page.get("slug") if isinstance(page.get("slug"), str) else ""
@@ -423,3 +433,226 @@ def dump_card(card):
     if not text.endswith("\n"):
         text += "\n"
     return text
+
+
+REPO = Path(__file__).resolve().parent.parent
+_OUT = REPO / "out"
+_SCHEMA = REPO / "schema" / "card.schema.json"
+_SLUG = re.compile(r"[A-Za-z0-9._-]+")
+_PAGE_URL = "https://wiki.adom.inc/blob/component/{slug}/page.json"
+_USER_AGENT = "opencomponentcards adom_import (+https://github.com/GrizzlyRay/opencomponentcards)"
+
+
+def characteristic_rows(page):
+    """The characteristics rows, or an empty list when the page has none."""
+    if not isinstance(page, dict):
+        return []
+    meta = page.get("metadata")
+    if not isinstance(meta, dict):
+        return []
+    chars = meta.get("characteristics")
+    if not isinstance(chars, dict):
+        return []
+    rows = chars.get("rows")
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def parse_slug(target):
+    """Slug from a bare slug, owner/slug, a wiki page URL, or a /blob/... URL."""
+    text = (target or "").strip()
+    if not text:
+        raise InputError("missing slug")
+    if "://" not in text and not text.startswith("/"):
+        if "/" not in text:
+            if not _SLUG.fullmatch(text):
+                raise InputError(f"not a slug: {target!r}")
+            return text
+        bits = text.split("/")
+        if len(bits) == 2 and _SLUG.fullmatch(bits[0]) and _SLUG.fullmatch(bits[1]):
+            return bits[1]
+        raise InputError(f"not a slug: {target!r}")
+    path = urllib.parse.urlsplit(text).path if "://" in text else text
+    path = path.rstrip("/") or "/"
+    patterns = (
+        r"/blob/component/(?P<slug>[A-Za-z0-9._-]+)(?:/page\.json)?",
+        r"/blob/(?P<owner>[A-Za-z0-9._-]+)/(?P<slug>[A-Za-z0-9._-]+)(?:/page\.json)?",
+        r"/(?P<owner>[A-Za-z0-9._-]+)/(?P<slug>[A-Za-z0-9._-]+)",
+    )
+    for pattern in patterns:
+        match = re.fullmatch(pattern, path)
+        if match:
+            return match.group("slug")
+    raise InputError(f"could not read a slug from {target!r}")
+
+
+def parse_kinds(text):
+    """Import kinds the caller asked to keep. Skipped kinds cannot be added back."""
+    if text is None:
+        return IMPORT_KINDS
+    names = [part.strip() for part in text.split(",") if part.strip()]
+    if not names:
+        raise InputError("--kinds is empty")
+    skipped = [name for name in names if name in SKIP_KINDS]
+    if skipped:
+        raise InputError("--kinds cannot include " + ", ".join(skipped) + "; those kinds are never imported")
+    unknown = [name for name in names if name not in IMPORT_KINDS]
+    if unknown:
+        raise InputError("--kinds has unknown kind " + ", ".join(unknown))
+    return frozenset(names)
+
+
+def output_path(slug, given):
+    """Card path. The default is out/adom/<slug>.yaml. Anything outside out/ is refused."""
+    root = _OUT.resolve()
+    if given is None:
+        safe = slug if _SLUG.fullmatch(slug) else "page"
+        path = root / "adom" / f"{safe}.yaml"
+    else:
+        raw = Path(given)
+        path = raw.resolve() if raw.is_absolute() else (Path.cwd() / raw).resolve()
+    if path == root or root not in path.parents:
+        raise InputError(f"--out {given or path} is outside out/")
+    return path
+
+
+def _json_hint(body):
+    """The wiki's hint string from a 404 body, or the body itself when it has none."""
+    text = body.decode("utf-8", errors="replace").strip()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return text or "not found"
+    if isinstance(data, dict):
+        hint = data.get("hint")
+        if isinstance(hint, str) and hint.strip():
+            return hint.strip()
+        if hint is not None and not isinstance(hint, str):
+            return json.dumps(hint, ensure_ascii=False)
+    return text or "not found"
+
+
+def fetch_page(slug):
+    """GET the component page.json. Redirects are followed. A 404 prints the wiki hint."""
+    url = _PAGE_URL.format(slug=urllib.parse.quote(slug, safe=""))
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            body = resp.read()
+    except urllib.error.HTTPError as exc:
+        payload = exc.read()
+        if exc.code == 404:
+            raise InputError(_json_hint(payload)) from exc
+        raise InputError(f"HTTP {exc.code} from {url}") from exc
+    except urllib.error.URLError as exc:
+        raise InputError(f"could not fetch {url}: {exc.reason}") from exc
+    try:
+        page = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise InputError(f"invalid JSON from {url}") from exc
+    if not isinstance(page, dict):
+        raise InputError(f"page from {url} is not a JSON object")
+    return page
+
+
+def load_page_file(path):
+    file = Path(path)
+    if not file.is_file():
+        raise InputError(f"not found: {path}")
+    try:
+        page = json.loads(file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise InputError(f"invalid JSON in {path}") from exc
+    if not isinstance(page, dict):
+        raise InputError(f"{path} is not a JSON object")
+    return page
+
+
+def report_lines(rows, kinds):
+    """One line per row: the parameter name, or skipped plus the reason."""
+    usable, skipped = select_rows(rows, kinds)
+    names = assign_names([item["row"] for item in usable])
+    by_row = {id(item["row"]): name for item, name in zip(usable, names)}
+    reason = {id(item["row"]): item["reason"] for item in skipped}
+    lines = []
+    for row in rows:
+        if id(row) in by_row:
+            lines.append(by_row[id(row)])
+            continue
+        symbol = row.get("symbol") or row.get("name") or "row"
+        lines.append(f"skipped {symbol}: {reason.get(id(row), 'skipped')}")
+    return lines
+
+
+def validate_written(path):
+    """Schema plus tools/validate.py semantic checks. Returns error strings."""
+    schema = json.loads(_SCHEMA.read_text(encoding="utf-8"))
+    validator = vd.Draft202012Validator(schema)
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    errors = [f"unquoted YAML date at {where} (quote it, e.g. \"2026-10-13\")" for where in vd.find_dates(raw)]
+    if not errors:
+        errors = list(vd.check_v01(raw))
+    if not errors and isinstance(raw, dict):
+        errors += [
+            f"schema {'/'.join(map(str, err.absolute_path)) or '$'}: {err.message[:160]}"
+            for err in validator.iter_errors(raw)
+        ]
+    if not errors and isinstance(raw, dict):
+        more, _warnings = vd.semantic(raw)
+        errors.extend(more)
+    return errors
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise InputError(message)
+
+
+def main(argv=None):
+    """Import one page. Exit 0 valid, 1 written but invalid, 2 input problem."""
+    parser = _Parser(prog="adom_import.py", description="Import an Adom wiki component page as an OCC card.")
+    parser.add_argument("target", help="slug, https://wiki.adom.inc/<owner>/<slug>, or a /blob/... URL")
+    parser.add_argument("--from-file", help="read page.json from PATH instead of the network")
+    parser.add_argument("--out", help="card path inside out/ (default out/adom/<slug>.yaml)")
+    parser.add_argument("--kinds", help="comma-separated import kinds to keep; skipped kinds are an error")
+    parser.add_argument("--category", help="OCC category, overriding the page")
+    parser.add_argument("--manufacturer", help="manufacturer, overriding the page")
+    parser.add_argument("--date", help="card created date YYYY-MM-DD (default today)")
+    parser.add_argument("--report", action="store_true", help="print each row's parameter name or skip reason")
+    try:
+        return _run(parser.parse_args(argv))
+    except InputError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
+def _run(args):
+    slug = parse_slug(args.target)
+    kinds = parse_kinds(args.kinds)
+    dest = output_path(slug, args.out)
+    page = load_page_file(args.from_file) if args.from_file else fetch_page(slug)
+    when = args.date or date.today().isoformat()
+    opts = Options(date=when, category=args.category, manufacturer=args.manufacturer, kinds=kinds)
+    try:
+        card = build_card(page, opts)
+    except InputError:
+        raise
+    for warning in opts.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    if args.report:
+        for line in report_lines(characteristic_rows(page), kinds):
+            print(line)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(dump_card(card), encoding="utf-8")
+    errors = validate_written(dest)
+    if errors:
+        for err in errors:
+            print(f"ERROR {err}")
+        return 1
+    print("PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
