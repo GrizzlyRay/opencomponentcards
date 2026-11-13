@@ -75,6 +75,7 @@ netlist = NET.read_text(encoding="utf-8")
 names = bound_param_names()
 missing_in_fixture = [name for name in names if "{" + name + "}" not in netlist]
 check("fixture names every bound parameter", not missing_in_fixture)
+check("the fixture measures f3db", sx.meas_names(netlist) == ["f3db"])
 if missing_in_fixture:
     print("  missing " + ", ".join(missing_in_fixture))
 
@@ -341,7 +342,7 @@ else:
     r_nom = next(param["nominal"] for param in resistor["parameters"] if param["name"] == "resistance")
     c_nom = next(param["nominal"] for param in capacitor["parameters"] if param["name"] == "capacitance")
     expect = 1.0 / (2.0 * math.pi * float(r_nom) * float(c_nom))
-    # The fixture measures Re(V(out)) = 0.5, which is the -3 dB point for this filter.
+    # The fixture measures vdb(out)=-3.0103, the magnitude -3 dB point.
     got = sum(values) / len(values) if values else None
     statuses = {row.get("status") for row in rows}
     within = (

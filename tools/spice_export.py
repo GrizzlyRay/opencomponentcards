@@ -516,7 +516,7 @@ def _format(value):
 
 _OUT = Path(__file__).resolve().parent.parent / "out"
 _PLACEHOLDER = re.compile(r"\{(p_[A-Za-z_][A-Za-z0-9_]*)\}")
-_MEAS_NAME = re.compile(r"(?im)^\s*\.meas(?:ure)?\s+\S+\s+([A-Za-z_][A-Za-z0-9_]*)\b")
+_MEAS_NAME = re.compile(r"(?im)^\s*\.?meas(?:ure)?\s+\S+\s+([A-Za-z_][A-Za-z0-9_]*)\b")
 _TIMEOUT = 60
 
 
@@ -533,7 +533,11 @@ def placeholders(text):
 
 
 def meas_names(text):
-    """Names from .meas / .measure cards, in order, ignoring comment lines."""
+    """Names from .meas cards and from meas commands, in order.
+
+    A leading dot is optional. ngspice-47 accepts vdb() and vm() only on the
+    meas command inside .control, not on a .meas card. Comment lines are skipped.
+    """
     found = []
     seen = set()
     for match in _MEAS_NAME.finditer(text):
@@ -730,7 +734,7 @@ def parse_meas_log(text, expected):
             rf"(?im)^.*\bmeasure\s+{re.escape(name)}\b.*(?:\bfailed\b|out of interval)"
         )
         failed_card = re.compile(
-            rf"(?im)^[ \t]*\.meas(?:ure)?\b(?:[ \t]+\S+){{0,4}}[ \t]+"
+            rf"(?im)^[ \t]*\.?meas(?:ure)?\b(?:[ \t]+\S+){{0,4}}[ \t]+"
             rf"{re.escape(name)}\b.*\bfailed\b"
         )
         found = number.search(text)
