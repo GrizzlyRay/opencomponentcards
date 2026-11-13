@@ -1,0 +1,3 @@
+refdes,mpn,manufacturer,value,tolerance
+R1,SYNTH-10K,Synthetic,10k,1%
+C1,SYNTH-10U,Synthetic,10u,1%
