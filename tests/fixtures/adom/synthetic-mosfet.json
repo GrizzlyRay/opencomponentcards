@@ -1,0 +1,178 @@
+{
+  "_note": "synthetic test fixture, invented values, not from wiki.adom.inc",
+  "owner": "synthetic-example",
+  "slug": "synthetic-mosfet",
+  "title": "Synthetic N-channel MOSFET",
+  "version": "0.0.0-synthetic",
+  "updated_at": "2026-01-15T00:00:00Z",
+  "license": "CC-BY-SA-4.0",
+  "component": {
+    "mpn": "SYN-MOS-30V",
+    "manufacturer": "Example Semi",
+    "package": "DFN 3x3",
+    "category": "Transistor",
+    "datasheet": "https://example.invalid/synthetic-mosfet.pdf"
+  },
+  "metadata": {
+    "characteristics": {
+      "rows": [
+        {
+          "name": "Drain-source on-resistance",
+          "symbol": "RDS(on)",
+          "kind": "electrical",
+          "unit": "\u03a9",
+          "min": null,
+          "typ": 0.012,
+          "max": 0.018,
+          "conditions": "VGS = 4.5V, ID = 5A",
+          "source_page": 2,
+          "source": "datasheet"
+        },
+        {
+          "name": "Drain-source on-resistance",
+          "symbol": "RDS(on)",
+          "kind": "electrical",
+          "unit": "\u03a9",
+          "min": null,
+          "typ": 0.012,
+          "max": 0.018,
+          "conditions": "VGS = 10V, ID = 10A",
+          "source_page": 2,
+          "source": "datasheet"
+        },
+        {
+          "name": "Zero gate voltage drain current",
+          "symbol": "IDSS",
+          "kind": "electrical",
+          "unit": "\u00b5A",
+          "min": null,
+          "typ": null,
+          "max": 1.0,
+          "conditions": "VDS = 24V, VGS = 0V",
+          "source_page": 2,
+          "source": "datasheet"
+        },
+        {
+          "name": "Zero gate voltage drain current",
+          "symbol": "IDSS",
+          "kind": "electrical",
+          "unit": "nA",
+          "min": null,
+          "typ": null,
+          "max": 1000.0,
+          "conditions": "VDS = 24V, VGS = 0V",
+          "source_page": 2,
+          "source": "datasheet"
+        },
+        {
+          "name": "Gate-source leakage current",
+          "symbol": "IGSS",
+          "kind": "electrical",
+          "unit": "\u03bcA",
+          "min": null,
+          "typ": 0.02,
+          "max": 0.1,
+          "conditions": "VGS = 12V, VDS = 0V",
+          "source_page": 2,
+          "source": "datasheet"
+        },
+        {
+          "name": "Gate resistance",
+          "symbol": "RG",
+          "kind": "electrical",
+          "unit": "\u2126",
+          "min": null,
+          "typ": 1.5,
+          "max": 3.0,
+          "conditions": "",
+          "source_page": 2,
+          "source": "datasheet"
+        },
+        {
+          "name": "Forward transconductance",
+          "symbol": "gFS",
+          "kind": "electrical",
+          "unit": "mS",
+          "min": 6.0,
+          "typ": 10.0,
+          "max": 14.0,
+          "conditions": "VDS = 5V, ID = 5A",
+          "source_page": 2,
+          "source": "datasheet"
+        },
+        {
+          "name": "Junction-to-ambient thermal resistance",
+          "symbol": "R\u03b8JA",
+          "kind": "thermal",
+          "unit": "\u00b0C/W",
+          "min": null,
+          "typ": 42.0,
+          "max": 55.0,
+          "conditions": "mounted on 1 inch pad",
+          "source_page": 3,
+          "source": "datasheet"
+        },
+        {
+          "name": "Output capacitance",
+          "symbol": "Coss",
+          "kind": "electrical",
+          "unit": "pF",
+          "min": null,
+          "typ": 90.0,
+          "max": null,
+          "conditions": "VDS = 15V, f = 1MHz",
+          "source_page": 2,
+          "source": "datasheet"
+        },
+        {
+          "name": "Drain-source voltage",
+          "symbol": "VDSS",
+          "kind": "absolute_maximum",
+          "unit": "V",
+          "min": null,
+          "typ": null,
+          "max": 30.0,
+          "conditions": "",
+          "source_page": 1,
+          "source": "datasheet"
+        },
+        {
+          "name": "Gate-source voltage",
+          "symbol": "VGS",
+          "kind": "recommended_operating",
+          "unit": "V",
+          "min": -8.0,
+          "typ": null,
+          "max": 12.0,
+          "conditions": "",
+          "source_page": 1,
+          "source": "datasheet"
+        },
+        {
+          "name": "Swapped limits",
+          "symbol": "VSW",
+          "kind": "electrical",
+          "unit": "V",
+          "min": 5.0,
+          "typ": null,
+          "max": 1.0,
+          "conditions": "invented swapped limits",
+          "source_page": 2,
+          "source": "datasheet"
+        },
+        {
+          "name": "Gate threshold voltage",
+          "symbol": "VGS(th)",
+          "kind": "electrical",
+          "unit": "V",
+          "min": 1.0,
+          "typ": null,
+          "max": 2.5,
+          "conditions": "VDS = VGS, ID = 250\u00b5A",
+          "source_page": 2,
+          "source": "datasheet"
+        }
+      ]
+    }
+  }
+}
