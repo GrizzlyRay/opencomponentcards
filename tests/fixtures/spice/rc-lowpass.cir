@@ -1,0 +1,15 @@
+* Synthetic RC low-pass. Invented test fixture, not a measurement of a real part.
+* For this unity-gain filter the real part of V(out) is 0.5 at the -3 dB
+* frequency. ngspice .meas AC v(out) reads that real part, so the threshold
+* is 0.5. A magnitude threshold of 0.707 would land below the cutoff.
+V1 in 0 DC 0 AC 1
+R1 in out {p_r1_resistance}
+C1 out 0 {p_c1_capacitance}
+* Other bound card parameters, not in the signal path:
+* {p_r1_tcr}
+* {p_c1_dc_bias_factor}
+* {p_c1_temperature_factor}
+* {p_c1_aging_per_decade_hour}
+.ac dec 100 0.1 100
+.meas ac f3db WHEN v(out)=0.5
+.end

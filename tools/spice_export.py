@@ -5,6 +5,9 @@ Every random value comes from random.Random(seed). The include file holds
 plain numbers in the card's unit. It does not call simulator functions such
 as agauss, gauss, unif, mc, or flat.
 
+The command line writes one ngspice deck per run, or one LTspice table deck.
+LTspice is not executed. ngspice is started with an argument list.
+
 Lot scope is drawn once per run and shared by every instance. Device scope
 and total scope are drawn once per instance. Lot and device combine as in
 docs/lot-device-spread.md. A distribution's truncate is part of that entry.
@@ -13,10 +16,17 @@ again, not by clamping a lot or device entry on its own.
 
 Dependence curves are not evaluated. Offsets apply to the nominal value.
 """
+import argparse
+import csv
+import io
 import math
 import random
 import re
+import shutil
 import statistics
+import subprocess
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import yaml
@@ -502,3 +512,489 @@ def _format(value):
     if value == 0:
         return "0"
     return repr(float(value))
+
+
+_OUT = Path(__file__).resolve().parent.parent / "out"
+_PLACEHOLDER = re.compile(r"\{(p_[A-Za-z_][A-Za-z0-9_]*)\}")
+_MEAS_NAME = re.compile(r"(?im)^\s*\.meas(?:ure)?\s+\S+\s+([A-Za-z_][A-Za-z0-9_]*)\b")
+_TIMEOUT = 60
+
+
+def placeholders(text):
+    """{p_...} names in the order they first appear, including comments."""
+    found = []
+    seen = set()
+    for match in _PLACEHOLDER.finditer(text):
+        name = match.group(1)
+        if name not in seen:
+            seen.add(name)
+            found.append(name)
+    return found
+
+
+def meas_names(text):
+    """Names from .meas / .measure cards, in order, ignoring comment lines."""
+    found = []
+    seen = set()
+    for match in _MEAS_NAME.finditer(text):
+        name = match.group(1)
+        if name not in seen:
+            seen.add(name)
+            found.append(name)
+    return found
+
+
+def parse_bind(text):
+    """Split REFDES=path on the first equals sign."""
+    if not isinstance(text, str) or "=" not in text:
+        raise ExportError(f"--bind {text} must be REFDES=path")
+    refdes, path = text.split("=", 1)
+    refdes = refdes.strip()
+    path = path.strip()
+    if not refdes or not path:
+        raise ExportError(f"--bind {text} must be REFDES=path")
+    return refdes, path
+
+
+def bound_names(binds):
+    """Spice names in bind order, then each card's parameter order."""
+    names = []
+    seen_ref = set()
+    seen = set()
+    for refdes, card in binds:
+        if refdes in seen_ref:
+            raise ExportError(f"duplicate refdes {refdes}")
+        seen_ref.add(refdes)
+        parameters = card.get("parameters") if isinstance(card, dict) else None
+        if not isinstance(parameters, list) or not parameters:
+            raise ExportError(f"{refdes}: card has no parameters")
+        for param in parameters:
+            pname = param.get("name") if isinstance(param, dict) else None
+            if not isinstance(pname, str) or not pname:
+                raise ExportError(f"{refdes}: a parameter name is missing")
+            spice = param_name(refdes, pname)
+            if spice in seen:
+                raise ExportError(f"duplicate parameter name {spice}")
+            seen.add(spice)
+            names.append(spice)
+    return names
+
+
+def check_bindings(text, names):
+    """Every {p_...} is bound, and every bound name appears in the netlist.
+
+    A mismatch raises ExportError and names both lists. An empty list is
+    written as (none).
+    """
+    used = placeholders(text)
+    bound = list(names)
+    missing = [name for name in used if name not in set(bound)]
+    unused = [name for name in bound if name not in set(used)]
+    if missing or unused:
+        missing_text = ", ".join(missing) if missing else "(none)"
+        unused_text = ", ".join(unused) if unused else "(none)"
+        raise ExportError(
+            "netlist parameters with no binding: "
+            + missing_text
+            + "\nbound parameters not used in the netlist: "
+            + unused_text
+        )
+
+
+def parse_specs(items, meas):
+    """NAME=lo:hi, repeatable. lo and hi are floats with lo < hi."""
+    specs = {}
+    known = set(meas)
+    for item in items:
+        if not isinstance(item, str) or "=" not in item or ":" not in item.split("=", 1)[1]:
+            raise ExportError(f"--spec {item} must be NAME=lo:hi")
+        name, rest = item.split("=", 1)
+        lo_text, hi_text = rest.split(":", 1)
+        try:
+            lo = float(lo_text)
+            hi = float(hi_text)
+        except ValueError as exc:
+            raise ExportError(f"--spec {item} must be NAME=lo:hi") from exc
+        if not math.isfinite(lo) or not math.isfinite(hi) or not lo < hi:
+            raise ExportError(f"--spec {name} needs lo < hi")
+        if name not in known:
+            raise ExportError(f"--spec {name} is not a .meas name")
+        if name in specs:
+            raise ExportError(f"--spec {name} is repeated")
+        specs[name] = (lo, hi)
+    return specs
+
+
+def plan_export(netlist_text, binds, n_runs, seed):
+    """Sample each bound card on its own seeded stream. Do not run a simulator."""
+    names = bound_names(binds)
+    check_bindings(netlist_text, names)
+    meas = meas_names(netlist_text)
+    columns = []
+    per_bind = []
+    for refdes, card in binds:
+        runs = sample(card, n_runs, seed, [refdes])
+        order = runs[0]["order"]
+        per_bind.append((refdes, order, runs))
+        for pname in order:
+            columns.append(param_name(refdes, pname))
+    if columns != names:
+        raise ExportError("sampled parameter order does not match the bindings")
+    planned = []
+    for index in range(n_runs):
+        values = {}
+        for refdes, order, runs in per_bind:
+            inst = runs[index]["instances"][0]
+            for pname in order:
+                values[param_name(refdes, pname)] = inst["values"][pname]
+        planned.append({"run": index + 1, "seed": seed, "values": values})
+    return {
+        "order": names,
+        "runs": planned,
+        "meas": meas,
+        "n_runs": n_runs,
+        "seed": seed,
+    }
+
+
+def _netlist_body(netlist_text):
+    if netlist_text.endswith("\n"):
+        return netlist_text
+    return netlist_text + "\n"
+
+
+def _param_lines(run, order):
+    lines = [
+        "* OpenComponentCards SPICE export. Plain numbers from a seeded Python RNG.",
+        f"* seed: {run['seed']}",
+        f"* run: {run['run']}",
+    ]
+    for name in order:
+        lines.append(f".param {name}={_format(run['values'][name])}")
+    return "\n".join(lines) + "\n"
+
+
+def render_ngspice(plan, netlist_text):
+    """One .cir and one .param per run. The .cir includes the .param file first."""
+    body = _netlist_body(netlist_text)
+    files = {}
+    for run in plan["runs"]:
+        tag = f"run_{run['run']:04d}"
+        files[f"{tag}.param"] = _param_lines(run, plan["order"])
+        files[f"{tag}.cir"] = (
+            "* OpenComponentCards ngspice deck. Plain numbers from a seeded Python RNG.\n"
+            f"* seed: {run['seed']}\n"
+            f"* run: {run['run']}\n"
+            f".include {tag}.param\n"
+            + body
+        )
+    return files
+
+
+def render_ltspice(plan, netlist_text):
+    """One deck. .step selects the row; each .param is a table of plain numbers.
+
+    LTspice is not run. The opening comment says the deck is untested there.
+    """
+    n_runs = plan["n_runs"]
+    lines = [
+        "* OpenComponentCards LTspice deck. Untested in LTspice.",
+        "* Plain numbers from a seeded Python RNG. The simulator is not run.",
+        f"* seed: {plan['seed']}",
+        f".step param run 1 {n_runs} 1",
+    ]
+    for name in plan["order"]:
+        pairs = [f"{run['run']}, {_format(run['values'][name])}" for run in plan["runs"]]
+        lines.append(f".param {name} = table(run, " + ", ".join(pairs) + ")")
+    text = "\n".join(lines) + "\n" + _netlist_body(netlist_text)
+    return {"ltspice.cir": text}
+
+
+def parse_meas_log(text, expected):
+    """Pull name = value lines. A missing or failed .meas is a reason, not a drop.
+
+    Returns (values, reasons). A name is in exactly one of the two dicts.
+    Assignments whose name was not requested are ignored.
+    """
+    values = {}
+    reasons = {}
+    for name in expected:
+        number = re.compile(
+            rf"(?m)^[ \t]*{re.escape(name)}[ \t]*=[ \t]*"
+            rf"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)"
+        )
+        failed_eq = re.compile(
+            rf"(?im)^[ \t]*{re.escape(name)}[ \t]*=[ \t]*(?:failed!?|fail|error)\b"
+        )
+        failed_measure = re.compile(
+            rf"(?im)^.*\bmeasure\s+{re.escape(name)}\b.*(?:\bfailed\b|out of interval)"
+        )
+        failed_card = re.compile(
+            rf"(?im)^[ \t]*\.meas(?:ure)?\b(?:[ \t]+\S+){{0,4}}[ \t]+"
+            rf"{re.escape(name)}\b.*\bfailed\b"
+        )
+        found = number.search(text)
+        if found:
+            values[name] = float(found.group(1))
+            continue
+        if failed_eq.search(text) or failed_measure.search(text) or failed_card.search(text):
+            reasons[name] = f"{name} failed"
+        else:
+            reasons[name] = f"{name} missing"
+    return values, reasons
+
+
+def results_csv(rows, param_order, meas):
+    """One row per run. Columns are run, seed, sampled params, .meas, status."""
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(["run", "seed", *param_order, *meas, "status"])
+    for row in rows:
+        cells = [str(row["run"]), str(row["seed"])]
+        for name in param_order:
+            cells.append(_format(row["values"][name]))
+        for name in meas:
+            value = row["meas"].get(name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                cells.append("")
+            else:
+                cells.append(_format(value))
+        cells.append(row["status"])
+        writer.writerow(cells)
+    return buffer.getvalue()
+
+
+def summary_text(rows, meas, specs, sim):
+    """Per .meas: count, failed, min, max, mean, and sample std. Yield if spec'd.
+
+    count is how many runs produced a number. failed is the rest. Yield is
+    in-spec runs divided by every run, and a failed run is not in spec.
+    LTspice was not executed, so its meas counts stay at zero.
+    """
+    lines = []
+    if sim == "ltspice":
+        lines.append("LTspice was not run.")
+    n_runs = len(rows)
+    for name in meas:
+        nums = []
+        failed = 0
+        if sim != "ltspice":
+            for row in rows:
+                value = row["meas"].get(name)
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    failed += 1
+                else:
+                    nums.append(float(value))
+        lines.append(name)
+        lines.append(f"count: {len(nums)}")
+        lines.append(f"failed: {failed}")
+        if nums:
+            lines.append(f"min: {_format(min(nums))}")
+            lines.append(f"max: {_format(max(nums))}")
+            lines.append(f"mean: {_format(statistics.fmean(nums))}")
+        else:
+            lines.append("min: n/a")
+            lines.append("max: n/a")
+            lines.append("mean: n/a")
+        if len(nums) >= 2:
+            lines.append(f"std: {_format(statistics.stdev(nums))}")
+        else:
+            lines.append("std: n/a")
+        if name in specs:
+            lo, hi = specs[name]
+            inside = 0
+            for row in rows:
+                if row.get("status") != "ok":
+                    continue
+                value = row["meas"].get(name)
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    continue
+                if lo <= float(value) <= hi:
+                    inside += 1
+            ratio = inside / n_runs if n_runs else 0.0
+            lines.append(f"yield: {_format(ratio)} lo={_format(lo)} hi={_format(hi)}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def output_dir(netlist, given):
+    """Directory inside out/. The default is out/spice/<netlist stem>."""
+    root = _OUT.resolve()
+    if given is None:
+        stem = Path(netlist).stem or "deck"
+        path = (root / "spice" / stem).resolve()
+    else:
+        raw = Path(given)
+        path = raw.resolve() if raw.is_absolute() else (Path.cwd() / raw).resolve()
+    if path == root or root not in path.parents:
+        shown = given if given is not None else path
+        raise ExportError(f"--out {shown} is outside out/")
+    return path
+
+
+def write_decks(dest, files):
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    for name, text in files.items():
+        if "/" in name or "\\" in name or name in ("", ".", ".."):
+            raise ExportError(f"refusing to write {name}")
+        (dest / name).write_bytes(text.encode("utf-8"))
+
+
+def _read_log(dest, tag):
+    path = Path(dest) / f"{tag}.log"
+    if not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _ngspice_once(binary, dest, number, timeout):
+    """Run one batch deck. shell is false. A timeout is a recorded reason."""
+    tag = f"run_{number:04d}"
+    try:
+        proc = subprocess.run(
+            [binary, "-b", "-o", f"{tag}.log", f"{tag}.cir"],
+            cwd=str(dest),
+            timeout=timeout,
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            shell=False,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return _read_log(dest, tag), f"timeout after {timeout}s"
+    except FileNotFoundError:
+        return "", "ngspice not found"
+    log = _read_log(dest, tag)
+    if proc.returncode != 0:
+        if not log:
+            log = (proc.stderr or b"").decode("utf-8", errors="replace")
+        return log, f"ngspice exit {proc.returncode}"
+    return log, None
+
+
+def simulate_ngspice(dest, plan, meas, binary, jobs, timeout):
+    """Write nothing. Run the decks already in dest. Keep every run, in order."""
+
+    def one(run):
+        number = run["run"]
+        try:
+            log, sim_reason = _ngspice_once(binary, dest, number, timeout)
+            values, reasons = parse_meas_log(log, meas)
+            problems = []
+            if sim_reason:
+                problems.append(sim_reason)
+            for name in meas:
+                if name in reasons:
+                    problems.append(reasons[name])
+            status = "ok" if not problems else "failed: " + "; ".join(problems)
+            meas_values = values
+        except Exception as exc:
+            meas_values = {}
+            status = f"failed: {exc}"
+        return {
+            "run": number,
+            "seed": run["seed"],
+            "values": run["values"],
+            "meas": meas_values,
+            "status": status,
+        }
+
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        return list(pool.map(one, plan["runs"]))
+
+
+def _rows_written(plan, meas):
+    return [
+        {
+            "run": run["run"],
+            "seed": run["seed"],
+            "values": run["values"],
+            "meas": {name: None for name in meas},
+            "status": "written",
+        }
+        for run in plan["runs"]
+    ]
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ExportError(message)
+
+
+def main(argv=None):
+    """Export decks and, for ngspice, summarize .meas. Exit 0, 1, or 2."""
+    parser = _Parser(prog="spice_export.py", description="Sample cards into plain SPICE numbers and run or write decks.")
+    parser.add_argument("--netlist", required=True, help="netlist path; {p_<refdes>_<param>} marks a bound value")
+    parser.add_argument("--bind", action="append", default=None, help="REFDES=path/to/card.yaml (repeatable)")
+    parser.add_argument("--runs", required=True, type=int, help="number of runs")
+    parser.add_argument("--seed", required=True, type=int, help="seed for every card's RNG")
+    parser.add_argument("--jobs", type=int, default=1, help="ngspice workers (default 1)")
+    parser.add_argument("--sim", choices=("ngspice", "ltspice"), default="ngspice")
+    parser.add_argument("--spec", action="append", default=None, help="NAME=lo:hi yield limit (repeatable)")
+    parser.add_argument("--out", help="directory inside out/ (default out/spice/<netlist stem>)")
+    parser.add_argument("--timeout", type=float, default=_TIMEOUT, help="seconds for each ngspice run")
+    try:
+        return _run(parser.parse_args(argv))
+    except ExportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
+def _run(args):
+    if isinstance(args.runs, bool) or args.runs < 1:
+        raise ExportError("--runs must be a positive int")
+    if isinstance(args.jobs, bool) or args.jobs < 1:
+        raise ExportError("--jobs must be a positive int")
+    if not math.isfinite(args.timeout) or args.timeout <= 0:
+        raise ExportError("--timeout must be positive")
+    if not args.bind:
+        raise ExportError("at least one --bind is required")
+    dest = output_dir(args.netlist, args.out)
+    if dest.exists() and not dest.is_dir():
+        raise ExportError(f"--out {args.out or dest} is not a directory")
+    net_path = Path(args.netlist)
+    if not net_path.is_file():
+        raise ExportError(f"not found: {args.netlist}")
+    try:
+        text = net_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ExportError(f"cannot read {args.netlist}: {exc}") from exc
+    binds = []
+    for item in args.bind:
+        refdes, path = parse_bind(item)
+        binds.append((refdes, load_card(path)))
+    names = bound_names(binds)
+    check_bindings(text, names)
+    meas = meas_names(text)
+    specs = parse_specs(args.spec or [], meas)
+    binary = None
+    if args.sim == "ngspice":
+        binary = shutil.which("ngspice")
+        if binary is None:
+            raise ExportError("ngspice not found on PATH")
+    plan = plan_export(text, binds, args.runs, args.seed)
+    if args.sim == "ltspice":
+        write_decks(dest, render_ltspice(plan, text))
+        rows = _rows_written(plan, meas)
+    else:
+        write_decks(dest, render_ngspice(plan, text))
+        rows = simulate_ngspice(dest, plan, meas, binary, args.jobs, args.timeout)
+    try:
+        (dest / "results.csv").write_bytes(results_csv(rows, plan["order"], meas).encode("utf-8"))
+        (dest / "summary.txt").write_bytes(summary_text(rows, meas, specs, args.sim).encode("utf-8"))
+    except OSError as exc:
+        raise ExportError(str(exc)) from exc
+    if args.sim == "ltspice":
+        print(f"wrote {dest / 'ltspice.cir'}")
+        return 0
+    failed = sum(row["status"] != "ok" for row in rows)
+    if failed:
+        print(f"failed {failed} of {len(rows)} {dest}")
+        return 1
+    print(f"ok {len(rows)} runs {dest}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
