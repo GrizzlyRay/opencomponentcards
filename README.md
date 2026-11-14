@@ -1,6 +1,6 @@
 # OpenComponentCards
 
-**v0.2, feedback wanted.**
+**v0.3, feedback wanted.**
 By Jacob Warren and GrizzlyRay LLC.
 
 > Researched and drafted by Jacob Warren with Grok and AI assistants; example values are assumptions, not manufacturer statistics.
@@ -103,7 +103,7 @@ Manufacturers, labs, and engineers can apply to sign cards with their own identi
 
 Open an issue, especially on:
 - the default when a distribution's shape is unknown (Drew's real cards use uniform over the published limit, and that's the leading answer for v0.2)
-- exporting cards to SPICE Monte Carlo syntax (agauss, mc, DEV/LOT)
+- the SPICE exporter and board tool (`tools/spice_export.py`, `tools/board_mc.py`), especially LTspice decks, which are not yet tested in LTspice
 - binding card values into vendor subcircuit models
 - mapping to CycloneDX or SPDX
 
@@ -120,12 +120,16 @@ CycloneDX and SPDX 3.0, IBIS and the IBIS Quality Specification, CMC compact mod
 
 ## Changelog
 
-**Unreleased.** Not a version bump. `card_version` stays `"0.2"`.
+**v0.3 (2026-11-13).** A tools release. The card format is unchanged and `card_version` stays `"0.2"`, so every v0.2 card is still valid.
 
 - Added `tools/adom_import.py`. It drafts an OCC card from an Adom wiki `page.json`: uniform over the published limits, maturity `"0.1"`, license copied from the page, and no datasheet hash. Drafts go to `out/` and are not committed. The mapping is from Drew Owens at Adom ([community notes](https://wiki.adom.inc/drew2/community-open-component-cards)). See [docs/adom-import.md](docs/adom-import.md).
 - Added `tools/spice_export.py`. It samples card distributions into plain SPICE numbers and writes decks under `out/`. ngspice runs are executed. LTspice decks are written but not yet tested in LTspice. ngspice-47 cannot parse `vdb()` or `vm()` on a `.meas` card, so the measurement is a `meas` command inside `.control`. See [docs/spice-export.md](docs/spice-export.md).
 - Added `tools/board_mc.py`. It resolves a BOM to cards, binds a KiCad SPICE netlist, and runs that Monte Carlo. `--allow-adom` and `--allow-fallback` default off. See [docs/board-mc.md](docs/board-mc.md).
 - Added `adom-skill/`, a local skill package for the importer, the SPICE exporter, and the board tool. It is not published.
+- CI now runs every tool test, including 200-run ngspice checks and shellcheck on the skill install scripts.
+- `adom-skill/install.sh` refuses system paths (including through symlinks) and will not overwrite files it did not install unless given `--force`.
+
+Thanks to Drew Owens, an engineer at Adom, whose community notes shaped the importer.
 
 **v0.2 (2026-10-13).** Cards now use `card_version: "0.2"`. There are two breaking changes, the `distributions` list and the signature file layout; see [docs/migration-v0.1-to-v0.2.md](docs/migration-v0.1-to-v0.2.md). Thanks to Drew Owens, an engineer at Adom, whose notes shaped this release.
 
