@@ -1,0 +1,8 @@
+refdes,mpn,manufacturer,value,tolerance,adom_slug
+R1,RC0603FR-0710KL,Yageo,10k,1%,should-not-fetch
+C1,NO-SUCH,Generic,100n,10%,synthetic-cap
+R2,,Generic,10k,1%,
+R3,,Generic,4.7k,,
+R8-R10,RC0603-4K7,Yageo,4.7k,1%,
+"C3,C4",,Generic,100n,10%,
+D1,1N4148,Diodes Inc,,,

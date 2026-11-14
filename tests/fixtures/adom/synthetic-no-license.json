@@ -1,0 +1,93 @@
+{
+  "_note": "synthetic test fixture, invented values, not from wiki.adom.inc",
+  "owner": "synthetic-example",
+  "slug": "synthetic-passive",
+  "title": "Synthetic 10 kOhm resistor",
+  "version": "0.0.0-synthetic",
+  "updated_at": "2026-01-15T00:00:00Z",
+  "component": {
+    "mpn": "SYN-R-10K",
+    "manufacturer": "Example Passive",
+    "package": "0603",
+    "category": "Resistor",
+    "datasheet": "https://example.invalid/synthetic-passive.pdf"
+  },
+  "metadata": {
+    "characteristics": {
+      "rows": [
+        {
+          "name": "Resistance",
+          "symbol": "R",
+          "kind": "electrical",
+          "unit": "k\u03a9",
+          "min": null,
+          "typ": 10.0,
+          "max": null,
+          "conditions": "",
+          "source_page": 1,
+          "source": "datasheet"
+        },
+        {
+          "name": "Resistance tolerance",
+          "symbol": "Tol",
+          "kind": "tolerance",
+          "unit": "%",
+          "min": -1,
+          "typ": null,
+          "max": 1,
+          "conditions": "",
+          "source_page": 1,
+          "source": "datasheet"
+        },
+        {
+          "name": "Temperature coefficient",
+          "symbol": "TCR",
+          "kind": "temperature_coefficient",
+          "unit": "ppm/\u2103",
+          "min": -100,
+          "typ": null,
+          "max": 100,
+          "conditions": "",
+          "source_page": 1,
+          "source": "datasheet"
+        },
+        {
+          "name": "Parasitic capacitance",
+          "symbol": "C",
+          "kind": "electrical",
+          "unit": "nF",
+          "min": null,
+          "typ": 0.5,
+          "max": null,
+          "conditions": "",
+          "source_page": 1,
+          "source": "datasheet"
+        },
+        {
+          "name": "Voltage coefficient",
+          "symbol": "VC",
+          "kind": "voltage_coefficient",
+          "unit": "ppm/V",
+          "min": -20,
+          "typ": null,
+          "max": 20,
+          "conditions": "",
+          "source_page": 1,
+          "source": "datasheet"
+        },
+        {
+          "name": "Rise time",
+          "symbol": "tr",
+          "kind": "timing",
+          "unit": "ns",
+          "min": null,
+          "typ": 5.0,
+          "max": 12.0,
+          "conditions": "",
+          "source_page": 1,
+          "source": "datasheet"
+        }
+      ]
+    }
+  }
+}

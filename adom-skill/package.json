@@ -1,0 +1,46 @@
+{
+  "slug": "opencomponentcards",
+  "title": "OpenComponentCards for Adom",
+  "version": "0.1.0",
+  "type": "skill",
+  "description": "Teach an agent to import OpenComponentCards, export plain SPICE numbers, and run a board Monte Carlo from a local clone.",
+  "tags": [
+    "components",
+    "spice",
+    "monte-carlo",
+    "kicad"
+  ],
+  "discovery_triggers": [
+    "import this part into an open component card",
+    "export spice parameters from these cards",
+    "run a monte carlo on this board",
+    "bind the bom and sweep the cutoff"
+  ],
+  "discovery_pitch": "Use this when the user wants a local OpenComponentCards import, a SPICE export, or a board Monte Carlo, with drafts kept in out/.",
+  "sample_prompts": [
+    {
+      "label": "Import a card",
+      "prompt": "Turn this local component page into an OpenComponentCards card and leave the draft in out/."
+    },
+    {
+      "label": "Board sweep",
+      "prompt": "Run 200 Monte Carlo runs of this board from the BOM and netlist, and do not invent fallback cards."
+    },
+    {
+      "label": "SPICE export",
+      "prompt": "Sample the resistor and capacitor cards into plain SPICE numbers with seed 7."
+    }
+  ],
+  "dependencies": {},
+  "scripts": {
+    "install": "./install.sh",
+    "uninstall": "./uninstall.sh"
+  },
+  "files": [
+    "package.json",
+    "SKILL.md",
+    "README.md",
+    "install.sh",
+    "uninstall.sh"
+  ]
+}

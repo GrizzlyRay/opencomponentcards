@@ -1,0 +1,8 @@
+# Same normalized mpn, different manufacturer. Must not win over the Yageo card.
+card_version: "0.2"
+id: occ:resistor/otherco-rc0603fr-0710kl@0.1.0
+part:
+  manufacturer: OtherCo
+  mpn: RC0603FR-0710KL
+  category: resistor
+parameters: []

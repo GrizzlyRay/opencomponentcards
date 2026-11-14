@@ -1,0 +1,18 @@
+* Synthetic KiCad SPICE export. Invented fixture, not a real board.
+.title RC filter
+.include "opamp.lib"
+.subckt opamp inp inn vcc vee out
+* Internal parts are not on the board.
+Rin inp inn 1Meg
+Ccomp out inn 10p
+Qint inn vee vee BJT
+.ends
+r1 /in /mid 10k
+R2 /mid /fb 10k
+C1 /mid 0 100n
+R99 /out 0 1k
+C2 /out 0 10p
+V1 /vcc 0 DC 5
+XU1 /mid /fb /vcc 0 /out opamp
+D2 /out /vcc DMOD
+.end
