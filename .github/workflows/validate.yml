@@ -59,3 +59,14 @@ jobs:
           else
             echo "::notice::Cards changed, so some signatures are stale. That's expected; the sign workflow re-signs on main and runs the strict check there."
           fi
+      - name: Run tool tests
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ngspice
+          pip install 'PyYAML>=6.0'
+          fail=0
+          for test in tests/test_*.py; do
+            echo "== $test =="
+            python3 "$test" || fail=1
+          done
+          exit "$fail"

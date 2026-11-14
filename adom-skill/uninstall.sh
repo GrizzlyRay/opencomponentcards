@@ -45,12 +45,138 @@ normalize_path() {
   printf '%s\n' "$path"
 }
 
+# Resolve symlinks with pwd -P. A missing tail is kept. macOS realpath and
+# readlink -f both fail on a path that does not exist yet, and realpath has
+# no portable -m flag.
+_resolve_real_path() {
+  local input="$1"
+  local depth="${2:-0}"
+  local path missing part parent target
+  if [ "$depth" -gt 40 ]; then
+    echo "error: too many symlinks in $input" >&2
+    return 1
+  fi
+  path="$(normalize_path "$input")" || return 1
+  missing=""
+  while [ ! -e "$path" ] && [ ! -L "$path" ] && [ "$path" != "/" ]; do
+    part="$(basename "$path")"
+    if [ -n "$missing" ]; then
+      missing="${part}/${missing}"
+    else
+      missing="$part"
+    fi
+    path="$(dirname "$path")"
+  done
+  if [ -L "$path" ]; then
+    target="$(readlink "$path")" || return 1
+    case "$target" in
+      /*) ;;
+      *)
+        parent="$(dirname "$path")"
+        parent="$(_resolve_real_path "$parent" "$((depth + 1))")" || return 1
+        if [ "$parent" = "/" ]; then
+          target="/${target}"
+        else
+          target="${parent}/${target}"
+        fi
+        ;;
+    esac
+    if [ -n "$missing" ]; then
+      if [ "$target" = "/" ]; then
+        target="/${missing}"
+      else
+        target="${target}/${missing}"
+      fi
+    fi
+    target="$(_resolve_real_path "$target" "$((depth + 1))")" || return 1
+    printf '%s\n' "$target"
+    return 0
+  fi
+  if [ -d "$path" ]; then
+    path="$(CDPATH='' cd -P -- "$path" && pwd -P)" || return 1
+  elif [ -e "$path" ]; then
+    part="$(basename "$path")"
+    parent="$(dirname "$path")"
+    parent="$(CDPATH='' cd -P -- "$parent" && pwd -P)" || return 1
+    if [ "$parent" = "/" ]; then
+      path="/${part}"
+    else
+      path="${parent}/${part}"
+    fi
+  fi
+  if [ -n "$missing" ]; then
+    if [ "$path" = "/" ]; then
+      path="/${missing}"
+    else
+      path="${path}/${missing}"
+    fi
+    path="$(normalize_path "$path")" || return 1
+  fi
+  printf '%s\n' "$path"
+}
+
+resolve_real_path() {
+  _resolve_real_path "$1" 0
+}
+
+path_is_under() {
+  local path="$1"
+  local root="$2"
+  if [ -z "$root" ] || [ "$root" = "/" ]; then
+    return 1
+  fi
+  if [ "$path" = "$root" ]; then
+    return 0
+  fi
+  case "$path" in
+    "$root"/*) return 0 ;;
+  esac
+  return 1
+}
+
 is_system_path() {
   case "$1" in
-    /|/usr|/usr/*|/opt|/opt/*|/bin|/bin/*|/sbin|/sbin/*|/System|/System/*|/Library|/Library/*|/Applications|/Applications/*|/etc|/etc/*|/private/etc|/private/etc/*)
+    /|/usr|/usr/*|/bin|/bin/*|/sbin|/sbin/*|/etc|/etc/*|/opt|/opt/*|/var|/var/*|/private|/private/*|/System|/System/*|/Library|/Library/*|/Applications|/Applications/*)
       return 0
       ;;
   esac
+  return 1
+}
+
+is_home_path() {
+  local resolved
+  if [ -z "${HOME:-}" ]; then
+    return 1
+  fi
+  resolved="$(resolve_real_path "$HOME")" || return 1
+  path_is_under "$1" "$resolved"
+}
+
+# On macOS /tmp is /private/tmp and the per-user temp dir resolves under
+# /private/var/folders. Refuse /private and /var, then allow those temp
+# trees, or a normal temp dest is refused after the real path is known.
+is_temp_path() {
+  local path="$1"
+  local candidate resolved
+  for candidate in /tmp /var/folders /private/var/folders; do
+    if [ -d "$candidate" ]; then
+      resolved="$(resolve_real_path "$candidate")" || continue
+      if path_is_under "$path" "$resolved"; then
+        return 0
+      fi
+    fi
+  done
+  if [ -n "${TMPDIR:-}" ] && [ -d "${TMPDIR%/}" ]; then
+    resolved="$(resolve_real_path "${TMPDIR%/}")" || return 1
+    case "$resolved" in
+      /|/usr|/bin|/sbin|/etc|/opt|/var|/private|/System|/Library|/Applications)
+        return 1
+        ;;
+    esac
+    if path_is_under "$path" "$resolved"; then
+      return 0
+    fi
+  fi
   return 1
 }
 
@@ -91,8 +217,8 @@ if [ "${#DESTS[@]}" -eq 0 ]; then
 fi
 
 for dest_raw in "${DESTS[@]}"; do
-  dest="$(normalize_path "$dest_raw")"
-  if is_system_path "$dest"; then
+  dest="$(resolve_real_path "$dest_raw")" || exit 1
+  if ! is_home_path "$dest" && ! is_temp_path "$dest" && is_system_path "$dest"; then
     echo "error: refusing system path $dest" >&2
     exit 1
   fi

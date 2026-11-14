@@ -32,6 +32,9 @@ cards/real/families/*.yaml  Family cards: shared series data plus value-dependen
 tools/validate.py           Validator: schema plus extra consistency checks
 tools/resolve.py            Merges a family card and a part card into one resolved card
 tools/adom_import.py        Drafts an OCC card from an Adom wiki page.json
+tools/spice_export.py       Samples cards into plain SPICE numbers and writes decks
+tools/board_mc.py           Resolves a board BOM and runs a Monte Carlo
+adom-skill/                 Local skill package for the importer and the two tools
 tests/                      Verifier tests
 tools/verify.sh             Verifies card signatures against the trusted-signer policy
 trust/signers.yaml          Public allow-list of trusted signers
@@ -42,6 +45,8 @@ docs/family-cards.md        Family cards and value-dependent rules
 docs/signer-trust.md        Signer trust levels and how to become a signer
 docs/migration-v0.1-to-v0.2.md  What changed since v0.1 and how to convert cards
 docs/adom-import.md         How the Adom importer maps a wiki page to a card
+docs/spice-export.md        How the SPICE exporter samples cards and writes decks
+docs/board-mc.md            How the board tool resolves a BOM and runs ngspice
 ```
 
 ## Quick start
@@ -118,6 +123,9 @@ CycloneDX and SPDX 3.0, IBIS and the IBIS Quality Specification, CMC compact mod
 **Unreleased.** Not a version bump. `card_version` stays `"0.2"`.
 
 - Added `tools/adom_import.py`. It drafts an OCC card from an Adom wiki `page.json`: uniform over the published limits, maturity `"0.1"`, license copied from the page, and no datasheet hash. Drafts go to `out/` and are not committed. The mapping is from Drew Owens at Adom ([community notes](https://wiki.adom.inc/drew2/community-open-component-cards)). See [docs/adom-import.md](docs/adom-import.md).
+- Added `tools/spice_export.py`. It samples card distributions into plain SPICE numbers and writes decks under `out/`. ngspice runs are executed. LTspice decks are written but not yet tested in LTspice. ngspice-47 cannot parse `vdb()` or `vm()` on a `.meas` card, so the measurement is a `meas` command inside `.control`. See [docs/spice-export.md](docs/spice-export.md).
+- Added `tools/board_mc.py`. It resolves a BOM to cards, binds a KiCad SPICE netlist, and runs that Monte Carlo. `--allow-adom` and `--allow-fallback` default off. See [docs/board-mc.md](docs/board-mc.md).
+- Added `adom-skill/`, a local skill package for the importer, the SPICE exporter, and the board tool. It is not published.
 
 **v0.2 (2026-10-13).** Cards now use `card_version: "0.2"`. There are two breaking changes, the `distributions` list and the signature file layout; see [docs/migration-v0.1-to-v0.2.md](docs/migration-v0.1-to-v0.2.md). Thanks to Drew Owens, an engineer at Adom, whose notes shaped this release.
 
