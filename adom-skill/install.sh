@@ -4,7 +4,7 @@
 # Does not copy the OpenComponentCards tree and does not install packages.
 set -euo pipefail
 
-PKG_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+PKG_DIR="$(CDPATH='' cd -- "$(dirname "$0")" && pwd)"
 SKILL_NAME="opencomponentcards"
 STAMP_NAME=".installed-by-opencomponentcards"
 FILES=(SKILL.md README.md)
@@ -96,11 +96,11 @@ _resolve_real_path() {
     return 0
   fi
   if [ -d "$path" ]; then
-    path="$(CDPATH= cd -P -- "$path" && pwd -P)" || return 1
+    path="$(CDPATH='' cd -P -- "$path" && pwd -P)" || return 1
   elif [ -e "$path" ]; then
     part="$(basename "$path")"
     parent="$(dirname "$path")"
-    parent="$(CDPATH= cd -P -- "$parent" && pwd -P)" || return 1
+    parent="$(CDPATH='' cd -P -- "$parent" && pwd -P)" || return 1
     if [ "$parent" = "/" ]; then
       path="/${part}"
     else
