@@ -232,6 +232,11 @@ else:
 home = Path(tempfile.mkdtemp(prefix="occ-skill-home-"))
 dest = Path(tempfile.mkdtemp(prefix="occ-skill-dest-"))
 other = Path(tempfile.mkdtemp(prefix="occ-skill-env-"))
+link_parent = None
+temp_ok = None
+tmp_ok = None
+owned_dest = None
+readme_dest = None
 try:
     (dest / "other-skill").mkdir()
     (dest / "other-skill" / "KEEP").write_text("keep\n", encoding="utf-8")
@@ -335,10 +340,189 @@ try:
         and "usr" in (refused.stderr + refused.stdout).lower()
         and not Path("/usr/opencomponentcards-skill-test").exists(),
     )
+
+    link_parent = Path(tempfile.mkdtemp(prefix="occ-skill-link-"))
+    link = link_parent / "dest"
+    link.symlink_to("/usr")
+    leaked = Path("/usr/opencomponentcards")
+    leaked_before = leaked.exists()
+    dry_link = run(
+        ["bash", str(SKILL / "install.sh"), "--dry-run", "--dest", str(link)],
+        ROOT,
+        env,
+    )
+    refused_link = run(
+        ["bash", str(SKILL / "install.sh"), "--dest", str(link)],
+        ROOT,
+        env,
+    )
+    refused_uninstall = run(
+        ["bash", str(SKILL / "uninstall.sh"), "--dest", str(link)],
+        ROOT,
+        env,
+    )
+    check(
+        "a symlink dest pointing into a refused path is refused",
+        dry_link.returncode != 0
+        and refused_link.returncode != 0
+        and refused_uninstall.returncode != 0
+        and "refusing system path" in dry_link.stderr
+        and "refusing system path" in refused_link.stderr
+        and "refusing system path" in refused_uninstall.stderr
+        and "/usr" in refused_link.stderr
+        and leaked.exists() == leaked_before
+        and link.is_symlink()
+        and not (link_parent / "opencomponentcards").exists(),
+    )
+    if (
+        dry_link.returncode == 0
+        or refused_link.returncode == 0
+        or "refusing system path" not in refused_link.stderr
+        or leaked.exists() != leaked_before
+    ):
+        print(dry_link.returncode, dry_link.stderr)
+        print(refused_link.returncode, refused_link.stderr)
+        print(refused_uninstall.returncode, refused_uninstall.stderr)
+    if not leaked_before and leaked.exists():
+        shutil.rmtree(leaked)
+
+    for root in ("/var", "/private"):
+        target = Path(root) / "opencomponentcards"
+        existed = target.exists()
+        proc = run(
+            ["bash", str(SKILL / "install.sh"), "--dest", root],
+            ROOT,
+            env,
+        )
+        check(
+            f"{root} is refused",
+            proc.returncode != 0
+            and "refusing system path" in proc.stderr
+            and target.exists() == existed,
+        )
+        if not existed and target.exists():
+            shutil.rmtree(target)
+        if proc.returncode == 0 or "refusing system path" not in proc.stderr:
+            print(proc.returncode, proc.stdout, proc.stderr)
+
+    temp_ok = Path(tempfile.mkdtemp(prefix="occ-skill-sys-"))
+    real_temp = Path(os.path.realpath(temp_ok))
+    temp_proc = run(
+        ["bash", str(SKILL / "install.sh"), "--dest", str(temp_ok)],
+        ROOT,
+        env,
+    )
+    check(
+        "a temp dest under the system temp dir works",
+        temp_proc.returncode == 0
+        and (temp_ok / "opencomponentcards" / "SKILL.md").is_file()
+        and (temp_ok / "opencomponentcards" / "SKILL.md").read_text(encoding="utf-8") == skill_text
+        and str(real_temp).startswith(os.path.realpath(tempfile.gettempdir())),
+    )
+    if temp_proc.returncode != 0:
+        print(f"  real temp {real_temp}")
+        print(temp_proc.stdout)
+        print(temp_proc.stderr)
+
+    tmp_ok = Path(tempfile.mkdtemp(prefix="occ-skill-tmp-", dir="/tmp"))
+    tmp_real = Path(os.path.realpath(tmp_ok))
+    tmp_proc = run(
+        ["bash", str(SKILL / "install.sh"), "--dest", str(tmp_ok)],
+        ROOT,
+        env,
+    )
+    check(
+        "a dest whose real path is under /tmp works",
+        tmp_proc.returncode == 0
+        and (tmp_ok / "opencomponentcards" / "SKILL.md").is_file()
+        and str(tmp_real).startswith(os.path.realpath("/tmp")),
+    )
+    if tmp_proc.returncode != 0:
+        print(f"  real /tmp dest {tmp_real}")
+        print(tmp_proc.stderr)
+
+    owned_dest = Path(tempfile.mkdtemp(prefix="occ-skill-owned-"))
+    owned_dir = owned_dest / "opencomponentcards"
+    owned_dir.mkdir()
+    (owned_dir / "SKILL.md").write_text("user owned\n", encoding="utf-8")
+    owned_before = snapshot(owned_dest)
+    dry_owned = run(
+        ["bash", str(SKILL / "install.sh"), "--dry-run", "--dest", str(owned_dest)],
+        ROOT,
+        env,
+    )
+    blocked = run(
+        ["bash", str(SKILL / "install.sh"), "--dest", str(owned_dest)],
+        ROOT,
+        env,
+    )
+    check(
+        "an unowned existing SKILL.md is refused without --force",
+        dry_owned.returncode == 2
+        and blocked.returncode == 2
+        and "SKILL.md" in blocked.stderr
+        and "--force" in blocked.stderr
+        and snapshot(owned_dest) == owned_before,
+    )
+    if dry_owned.returncode != 2 or blocked.returncode != 2 or snapshot(owned_dest) != owned_before:
+        print(dry_owned.returncode, dry_owned.stdout, dry_owned.stderr)
+        print(blocked.returncode, blocked.stdout, blocked.stderr)
+        print(sorted(snapshot(owned_dest)))
+    forced = run(
+        ["bash", str(SKILL / "install.sh"), "--force", "--dest", str(owned_dest)],
+        ROOT,
+        env,
+    )
+    forced_snapshot = snapshot(owned_dest)
+    check(
+        "--force replaces an unowned SKILL.md",
+        forced.returncode == 0
+        and (owned_dir / "SKILL.md").read_text(encoding="utf-8") == skill_text
+        and (owned_dir / "README.md").read_text(encoding="utf-8") == readme_text,
+    )
+    if forced.returncode != 0:
+        print(forced.stdout)
+        print(forced.stderr)
+    reinstall = run(
+        ["bash", str(SKILL / "install.sh"), "--dest", str(owned_dest)],
+        ROOT,
+        env,
+    )
+    check(
+        "a reinstall over the package's own files is idempotent",
+        reinstall.returncode == 0 and snapshot(owned_dest) == forced_snapshot,
+    )
+    if reinstall.returncode != 0 or snapshot(owned_dest) != forced_snapshot:
+        print(reinstall.stdout)
+        print(reinstall.stderr)
+
+    readme_dest = Path(tempfile.mkdtemp(prefix="occ-skill-readme-"))
+    readme_dir = readme_dest / "opencomponentcards"
+    readme_dir.mkdir()
+    (readme_dir / "README.md").write_text("user readme\n", encoding="utf-8")
+    readme_before = snapshot(readme_dest)
+    blocked_readme = run(
+        ["bash", str(SKILL / "install.sh"), "--dest", str(readme_dest)],
+        ROOT,
+        env,
+    )
+    check(
+        "an unowned existing README.md is refused without --force",
+        blocked_readme.returncode == 2
+        and "README.md" in blocked_readme.stderr
+        and "--force" in blocked_readme.stderr
+        and snapshot(readme_dest) == readme_before,
+    )
+    if blocked_readme.returncode != 2 or snapshot(readme_dest) != readme_before:
+        print(blocked_readme.returncode, blocked_readme.stderr)
+        print(sorted(snapshot(readme_dest)))
 finally:
     shutil.rmtree(home, ignore_errors=True)
     shutil.rmtree(dest, ignore_errors=True)
     shutil.rmtree(other, ignore_errors=True)
+    for extra in (link_parent, temp_ok, tmp_ok, owned_dest, readme_dest):
+        if extra is not None:
+            shutil.rmtree(extra, ignore_errors=True)
 
 adom = shutil.which("adom-wiki")
 if adom is None:
